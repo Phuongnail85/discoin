@@ -27,7 +27,7 @@ $ brew install gcc cmake boost
 ```
 #### Compile Discoin binaries
 ```
-$ git clone https://github.com/flodaq/discoin.git
+$ git clone https://github.com/discodery/discoin.git
 $ cd discoin
 $ mkdir build
 $ cmake -S . -B build
