@@ -15,7 +15,7 @@ $ sudo ./b2 install
 ```
 #### Compile Discoin binaries
 ```
-$ git clone https://github.com/flodaq/discoin.git
+$ git clone https://github.com/discodery/discoin.git
 $ cd discoin
 $ cmake .
 $ make -j
