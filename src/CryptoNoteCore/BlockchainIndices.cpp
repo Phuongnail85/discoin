@@ -12,6 +12,13 @@
 
 namespace CryptoNote {
 
+namespace {
+  const size_t DEFAULT_BUCKET_COUNT = 5;
+}
+
+PaymentIdIndex::PaymentIdIndex(bool _enabled) : enabled(_enabled), index(DEFAULT_BUCKET_COUNT, paymentIdHash) {
+}
+
 bool PaymentIdIndex::add(const Transaction& transaction) {
   Crypto::Hash paymentId;
   Crypto::Hash transactionHash = getObjectHash(transaction);
@@ -61,6 +68,9 @@ void PaymentIdIndex::serialize(ISerializer& s) {
   s(index, "index");
 }
 
+TimestampBlocksIndex::TimestampBlocksIndex(bool _enabled) : enabled(_enabled) {
+}
+
 bool TimestampBlocksIndex::add(uint64_t timestamp, const Crypto::Hash& hash) {
   index.emplace(timestamp, hash);
   return true;
@@ -102,6 +112,9 @@ void TimestampBlocksIndex::clear() {
 
 void TimestampBlocksIndex::serialize(ISerializer& s) {
   s(index, "index");
+}
+
+TimestampTransactionsIndex::TimestampTransactionsIndex(bool _enabled) : enabled(_enabled) {
 }
 
 bool TimestampTransactionsIndex::add(uint64_t timestamp, const Crypto::Hash& hash) {
@@ -147,8 +160,7 @@ void TimestampTransactionsIndex::serialize(ISerializer& s) {
   s(index, "index");
 }
 
-GeneratedTransactionsIndex::GeneratedTransactionsIndex() : lastGeneratedTxNumber(0) {
-
+GeneratedTransactionsIndex::GeneratedTransactionsIndex(bool _enabled) : lastGeneratedTxNumber(0), enabled(_enabled) {
 }
 
 bool GeneratedTransactionsIndex::add(const Block& block) {
@@ -156,7 +168,7 @@ bool GeneratedTransactionsIndex::add(const Block& block) {
 
   if (index.size() != blockHeight) {
     return false;
-  } 
+  }
 
   bool status = index.emplace(blockHeight, lastGeneratedTxNumber + block.transactionHashes.size() + 1).second; //Plus miner tx
   if (status) {
@@ -183,7 +195,7 @@ bool GeneratedTransactionsIndex::remove(const Block& block) {
   } else {
     lastGeneratedTxNumber = 0;
   }
-  
+
   return true;
 }
 
@@ -206,6 +218,9 @@ void GeneratedTransactionsIndex::clear() {
 void GeneratedTransactionsIndex::serialize(ISerializer& s) {
   s(index, "index");
   s(lastGeneratedTxNumber, "lastGeneratedTxNumber");
+}
+
+OrphanBlocksIndex::OrphanBlocksIndex(bool _enabled) : enabled(_enabled) {
 }
 
 bool OrphanBlocksIndex::add(const Block& block) {

@@ -120,6 +120,10 @@ bool RpcServer::processJsonRpcRequest(const HttpRequest& request, HttpResponse& 
 
   response.addHeader("Content-Type", "application/json");
 
+  if (!m_cors_domain.empty()) {
+    response.addHeader("Access-Control-Allow-Origin", m_cors_domain);
+  }
+
   JsonRpcRequest jsonRequest;
   JsonRpcResponse jsonResponse;
 
@@ -158,6 +162,16 @@ bool RpcServer::processJsonRpcRequest(const HttpRequest& request, HttpResponse& 
 
   response.setBody(jsonResponse.getBody());
   logger(TRACE) << "JSON-RPC response: " << jsonResponse.getBody();
+  return true;
+}
+
+bool RpcServer::restrictRPC(bool is_restricted) {
+  m_restricted_rpc = is_restricted;
+  return true;
+}
+
+bool RpcServer::enableCors(std::string domain) {
+  m_cors_domain = domain;
   return true;
 }
 
@@ -403,6 +417,11 @@ bool RpcServer::on_send_raw_tx(const COMMAND_RPC_SEND_RAW_TX::request& req, COMM
 }
 
 bool RpcServer::on_start_mining(const COMMAND_RPC_START_MINING::request& req, COMMAND_RPC_START_MINING::response& res) {
+  if (m_restricted_rpc) {
+    res.status = "Failed, restricted handle";
+    return false;
+  }
+
   AccountPublicAddress adr;
   if (!m_core.currency().parseAccountAddressString(req.miner_address, adr)) {
     res.status = "Failed, wrong address";
@@ -419,15 +438,26 @@ bool RpcServer::on_start_mining(const COMMAND_RPC_START_MINING::request& req, CO
 }
 
 bool RpcServer::on_stop_mining(const COMMAND_RPC_STOP_MINING::request& req, COMMAND_RPC_STOP_MINING::response& res) {
+  if (m_restricted_rpc) {
+    res.status = "Failed, restricted handle";
+    return false;
+  }
+
   if (!m_core.get_miner().stop()) {
     res.status = "Failed, mining not stopped";
     return true;
   }
+
   res.status = CORE_RPC_STATUS_OK;
   return true;
 }
 
 bool RpcServer::on_stop_daemon(const COMMAND_RPC_STOP_DAEMON::request& req, COMMAND_RPC_STOP_DAEMON::response& res) {
+  if (m_restricted_rpc) {
+    res.status = "Failed, restricted handle";
+    return false;
+  }
+
   if (m_core.currency().isTestnet()) {
     m_p2p.sendStopSignal();
     res.status = CORE_RPC_STATUS_OK;
@@ -435,6 +465,7 @@ bool RpcServer::on_stop_daemon(const COMMAND_RPC_STOP_DAEMON::request& req, COMM
     res.status = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
     return false;
   }
+
   return true;
 }
 

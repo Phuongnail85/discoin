@@ -15,9 +15,13 @@ namespace CryptoNote {
 
 class ISerializer;
 
+inline size_t paymentIdHash(const Crypto::Hash& paymentId) {
+  return boost::hash_range(std::begin(paymentId.data), std::end(paymentId.data));
+}
+
 class PaymentIdIndex {
 public:
-  PaymentIdIndex() = default;
+  explicit PaymentIdIndex(bool enabled);
 
   bool add(const Transaction& transaction);
   bool remove(const Transaction& transaction);
@@ -26,17 +30,18 @@ public:
 
   void serialize(ISerializer& s);
 
-  template<class Archive> 
+  template<class Archive>
   void serialize(Archive& archive, unsigned int version) {
     archive & index;
   }
 private:
-  std::unordered_multimap<Crypto::Hash, Crypto::Hash> index;
+  std::unordered_multimap<Crypto::Hash, Crypto::Hash, std::function<decltype(paymentIdHash)>> index;
+  bool enabled = false;
 };
 
 class TimestampBlocksIndex {
 public:
-  TimestampBlocksIndex() = default;
+  explicit TimestampBlocksIndex(bool enabled);
 
   bool add(uint64_t timestamp, const Crypto::Hash& hash);
   bool remove(uint64_t timestamp, const Crypto::Hash& hash);
@@ -45,17 +50,18 @@ public:
 
   void serialize(ISerializer& s);
 
-  template<class Archive> 
+  template<class Archive>
   void serialize(Archive& archive, unsigned int version) {
     archive & index;
   }
 private:
   std::multimap<uint64_t, Crypto::Hash> index;
+  bool enabled = false;
 };
 
 class TimestampTransactionsIndex {
 public:
-  TimestampTransactionsIndex() = default;
+  explicit TimestampTransactionsIndex(bool enabled);
 
   bool add(uint64_t timestamp, const Crypto::Hash& hash);
   bool remove(uint64_t timestamp, const Crypto::Hash& hash);
@@ -70,11 +76,12 @@ public:
   }
 private:
   std::multimap<uint64_t, Crypto::Hash> index;
+  bool enabled = false;
 };
 
 class GeneratedTransactionsIndex {
 public:
-  GeneratedTransactionsIndex();
+  explicit GeneratedTransactionsIndex(bool enabled);
 
   bool add(const Block& block);
   bool remove(const Block& block);
@@ -83,7 +90,7 @@ public:
 
   void serialize(ISerializer& s);
 
-  template<class Archive> 
+  template<class Archive>
   void serialize(Archive& archive, unsigned int version) {
     archive & index;
     archive & lastGeneratedTxNumber;
@@ -91,11 +98,12 @@ public:
 private:
   std::unordered_map<uint32_t, uint64_t> index;
   uint64_t lastGeneratedTxNumber;
+  bool enabled = false;
 };
 
 class OrphanBlocksIndex {
 public:
-  OrphanBlocksIndex() = default;
+  explicit OrphanBlocksIndex(bool enabled);
 
   bool add(const Block& block);
   bool remove(const Block& block);
@@ -103,6 +111,7 @@ public:
   void clear();
 private:
   std::unordered_multimap<uint32_t, Crypto::Hash> index;
+  bool enabled = false;
 };
 
 }
