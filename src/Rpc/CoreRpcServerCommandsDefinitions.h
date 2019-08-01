@@ -427,6 +427,128 @@ struct COMMAND_RPC_GET_BLOCK_HEADER_BY_HEIGHT {
   typedef BLOCK_HEADER_RESPONSE response;
 };
 
+struct block_short_response {
+  uint64_t timestamp;
+  uint32_t height;
+  std::string hash;
+  uint64_t tx_count;
+  uint64_t cumul_size;
+  difficulty_type difficulty;
+
+  void serialize(ISerializer &s) {
+    KV_MEMBER(timestamp)
+    KV_MEMBER(height)
+    KV_MEMBER(hash)
+    KV_MEMBER(cumul_size)
+    KV_MEMBER(tx_count)
+    KV_MEMBER(difficulty)
+  }
+};
+
+struct COMMAND_RPC_GET_BLOCKS_LIST {
+  struct request {
+    uint32_t height;
+
+    void serialize(ISerializer &s) {
+      KV_MEMBER(height)
+    }
+  };
+
+  struct response {
+    std::vector<block_short_response> blocks; //transactions blobs as hex
+    std::string status;
+
+    void serialize(ISerializer &s) {
+      KV_MEMBER(blocks)
+      KV_MEMBER(status)
+    }
+  };
+};
+
+struct transaction_short_response {
+  std::string hash;
+  uint64_t fee;
+  uint64_t amount_out;
+  uint64_t size;
+
+  void serialize(ISerializer &s) {
+    KV_MEMBER(hash)
+    KV_MEMBER(fee)
+    KV_MEMBER(amount_out)
+    KV_MEMBER(size)
+  }
+};
+
+struct block_details_response {
+  uint8_t major_version;
+  uint8_t minor_version;
+  uint64_t timestamp;
+  std::string prev_hash;
+  uint32_t nonce;
+  bool orphan_status;
+  uint32_t height;
+  uint32_t depth;
+  std::string hash;
+  difficulty_type difficulty;
+  difficulty_type cumulativeDifficulty;
+  uint64_t reward;
+  uint64_t blockSize;
+  size_t sizeMedian;
+  uint64_t effectiveSizeMedian;
+  uint64_t transactionsCumulativeSize;
+  std::string alreadyGeneratedCoins;
+  uint64_t alreadyGeneratedTransactions;
+  uint64_t baseReward;
+  double penalty;
+  uint64_t totalFeeAmount;
+  std::vector<transaction_short_response> transactions;
+
+  void serialize(ISerializer &s) {
+    KV_MEMBER(major_version)
+    KV_MEMBER(minor_version)
+    KV_MEMBER(timestamp)
+    KV_MEMBER(prev_hash)
+    KV_MEMBER(nonce)
+    KV_MEMBER(orphan_status)
+    KV_MEMBER(height)
+    KV_MEMBER(depth)
+    KV_MEMBER(hash)
+    KV_MEMBER(difficulty)
+    KV_MEMBER(cumulativeDifficulty)
+    KV_MEMBER(reward)
+    KV_MEMBER(blockSize)
+    KV_MEMBER(sizeMedian)
+    KV_MEMBER(effectiveSizeMedian)
+    KV_MEMBER(transactionsCumulativeSize)
+    KV_MEMBER(alreadyGeneratedCoins)
+    KV_MEMBER(alreadyGeneratedTransactions)
+    KV_MEMBER(baseReward)
+    KV_MEMBER(penalty)
+    KV_MEMBER(totalFeeAmount)
+    KV_MEMBER(transactions)
+  }
+};
+
+struct COMMAND_RPC_GET_BLOCK_DETAILS {
+  struct request {
+    std::string hash;
+
+    void serialize(ISerializer &s) {
+      KV_MEMBER(hash)
+    }
+  };
+
+  struct response {
+    block_details_response block;
+    std::string status;
+
+    void serialize(ISerializer &s) {
+      KV_MEMBER(block)
+      KV_MEMBER(status)
+    }
+  };
+};
+
 struct COMMAND_RPC_QUERY_BLOCKS {
   struct request {
     std::vector<Crypto::Hash> block_ids; //*first 10 blocks id goes sequential, next goes in pow(2,n) offset, like 2, 4, 8, 16, 32, 64 and so on, and the last one is always genesis block */
@@ -479,6 +601,46 @@ struct COMMAND_RPC_QUERY_BLOCKS_LITE {
       KV_MEMBER(currentHeight)
       KV_MEMBER(fullOffset)
       KV_MEMBER(items)
+    }
+  };
+};
+
+  struct mempool_transaction_response {
+    std::string hash;
+    uint64_t fee;
+    uint64_t amount_out;
+    uint64_t size;
+    uint64_t receiveTime;
+    bool keptByBlock;
+    uint32_t max_used_block_height;
+    std::string max_used_block_id;
+    uint32_t last_failed_height;
+    std::string last_failed_id;
+
+    void serialize(ISerializer &s) {
+      KV_MEMBER(hash)
+      KV_MEMBER(fee)
+      KV_MEMBER(amount_out)
+      KV_MEMBER(size)
+      KV_MEMBER(receiveTime)
+      KV_MEMBER(keptByBlock)
+      KV_MEMBER(max_used_block_height)
+      KV_MEMBER(max_used_block_id)
+      KV_MEMBER(last_failed_height)
+      KV_MEMBER(last_failed_id)
+    }
+  };
+
+struct COMMAND_RPC_GET_MEMPOOL {
+  typedef EMPTY_STRUCT request;
+
+  struct response {
+    std::vector<mempool_transaction_response> mempool;
+    std::string status;
+
+    void serialize(ISerializer &s) {
+      KV_MEMBER(mempool)
+      KV_MEMBER(status)
     }
   };
 };

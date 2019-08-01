@@ -9,6 +9,7 @@
 
 #include <Logging/LoggerRef.h>
 #include "CoreRpcServerCommandsDefinitions.h"
+#include "Common/Math.h"
 
 namespace CryptoNote {
 
@@ -41,13 +42,13 @@ private:
   bool isCoreReady();
 
   // binary handlers
-  bool on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request& req, COMMAND_RPC_GET_BLOCKS_FAST::response& res);
-  bool on_query_blocks(const COMMAND_RPC_QUERY_BLOCKS::request& req, COMMAND_RPC_QUERY_BLOCKS::response& res);
-  bool on_query_blocks_lite(const COMMAND_RPC_QUERY_BLOCKS_LITE::request& req, COMMAND_RPC_QUERY_BLOCKS_LITE::response& res);
-  bool on_get_indexes(const COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES::request& req, COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES::response& res);
-  bool on_get_random_outs(const COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::request& req, COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::response& res);
-  bool onGetPoolChanges(const COMMAND_RPC_GET_POOL_CHANGES::request& req, COMMAND_RPC_GET_POOL_CHANGES::response& rsp);
-  bool onGetPoolChangesLite(const COMMAND_RPC_GET_POOL_CHANGES_LITE::request& req, COMMAND_RPC_GET_POOL_CHANGES_LITE::response& rsp);
+  bool on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request& request, COMMAND_RPC_GET_BLOCKS_FAST::response& response);
+  bool on_query_blocks(const COMMAND_RPC_QUERY_BLOCKS::request& request, COMMAND_RPC_QUERY_BLOCKS::response& response);
+  bool on_query_blocks_lite(const COMMAND_RPC_QUERY_BLOCKS_LITE::request& request, COMMAND_RPC_QUERY_BLOCKS_LITE::response& response);
+  bool on_get_indexes(const COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES::request& request, COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES::response& response);
+  bool on_get_random_outs(const COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::request& request, COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::response& response);
+  bool onGetPoolChanges(const COMMAND_RPC_GET_POOL_CHANGES::request& request, COMMAND_RPC_GET_POOL_CHANGES::response& response);
+  bool onGetPoolChangesLite(const COMMAND_RPC_GET_POOL_CHANGES_LITE::request& request, COMMAND_RPC_GET_POOL_CHANGES_LITE::response& response);
 
   // json handlers
   bool on_get_info(const COMMAND_RPC_GET_INFO::request& request, COMMAND_RPC_GET_INFO::response& response);
@@ -67,6 +68,9 @@ private:
   bool on_get_last_block_header(const COMMAND_RPC_GET_LAST_BLOCK_HEADER::request& request, COMMAND_RPC_GET_LAST_BLOCK_HEADER::response& response);
   bool on_get_block_header_by_hash(const COMMAND_RPC_GET_BLOCK_HEADER_BY_HASH::request& request, COMMAND_RPC_GET_BLOCK_HEADER_BY_HASH::response& response);
   bool on_get_block_header_by_height(const COMMAND_RPC_GET_BLOCK_HEADER_BY_HEIGHT::request& request, COMMAND_RPC_GET_BLOCK_HEADER_BY_HEIGHT::response& response);
+  bool on_get_blocks_list(const COMMAND_RPC_GET_BLOCKS_LIST::request& request, COMMAND_RPC_GET_BLOCKS_LIST::response& response);
+  bool on_get_block_details(const COMMAND_RPC_GET_BLOCK_DETAILS::request& request, COMMAND_RPC_GET_BLOCK_DETAILS::response& response);
+  bool on_get_mempool(const COMMAND_RPC_GET_MEMPOOL::request& request, COMMAND_RPC_GET_MEMPOOL::response& response);
 
   void fill_block_header_response(const Block& blk, bool orphan_status, uint64_t height, const Crypto::Hash& hash, block_header_response& response);
 

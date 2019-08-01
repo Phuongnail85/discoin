@@ -558,6 +558,10 @@ std::vector<Transaction> core::getPoolTransactions() {
   return result;
 }
 
+std::list<CryptoNote::tx_memory_pool::TransactionDetails> core::getMemoryPool() const {
+  return m_mempool.getMemoryPool();
+}
+
 std::vector<Crypto::Hash> core::buildSparseChain() {
   assert(m_blockchain.getCurrentBlockchainHeight() != 0);
   return m_blockchain.buildSparseChain();
@@ -827,6 +831,11 @@ bool core::scanOutputkeysForIndices(const KeyInput& txInToKey, std::list<std::pa
 
 bool core::getBlockDifficulty(uint32_t height, difficulty_type& difficulty) {
   difficulty = m_blockchain.blockDifficulty(height);
+  return true;
+}
+
+bool core::getBlockCumulativeDifficulty(uint32_t height, difficulty_type& difficulty) {
+  difficulty = m_blockchain.blockCumulativeDifficulty(height);
   return true;
 }
 

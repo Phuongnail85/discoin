@@ -250,6 +250,15 @@ namespace CryptoNote {
     }
   }
   //---------------------------------------------------------------------------------
+  std::list<CryptoNote::tx_memory_pool::TransactionDetails> tx_memory_pool::getMemoryPool() const {
+    std::lock_guard<std::recursive_mutex> lock(m_transactions_lock);
+    std::list<tx_memory_pool::TransactionDetails> txs;
+    for (const auto& txd : m_fee_index) {
+      txs.push_back(txd);
+    }
+    return txs;
+  }
+  //---------------------------------------------------------------------------------
   void tx_memory_pool::get_difference(const std::vector<Crypto::Hash>& known_tx_ids, std::vector<Crypto::Hash>& new_tx_ids, std::vector<Crypto::Hash>& deleted_tx_ids) const {
     std::lock_guard<std::recursive_mutex> lock(m_transactions_lock);
     std::unordered_set<Crypto::Hash> ready_tx_ids;

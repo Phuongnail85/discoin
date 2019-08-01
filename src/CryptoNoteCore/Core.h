@@ -64,6 +64,7 @@ namespace CryptoNote {
                                  uint64_t& reward, int64_t& emissionChange) override;
      virtual bool scanOutputkeysForIndices(const KeyInput& txInToKey, std::list<std::pair<Crypto::Hash, size_t>>& outputReferences) override;
      virtual bool getBlockDifficulty(uint32_t height, difficulty_type& difficulty) override;
+     virtual bool getBlockCumulativeDifficulty(uint32_t height, difficulty_type& difficulty) override;
      virtual bool getBlockContainingTx(const Crypto::Hash& txId, Crypto::Hash& blockId, uint32_t& blockHeight) override;
      virtual bool getMultisigOutputReference(const MultisignatureInput& txInMultisig, std::pair<Crypto::Hash, size_t>& output_reference) override;
      virtual bool getGeneratedTransactionsNumber(uint32_t height, uint64_t& generatedTransactions) override;
@@ -81,6 +82,7 @@ namespace CryptoNote {
 
      uint32_t get_current_blockchain_height();
      bool have_block(const Crypto::Hash& id) override;
+    std::list<CryptoNote::tx_memory_pool::TransactionDetails> getMemoryPool() const;
      std::vector<Crypto::Hash> buildSparseChain() override;
      std::vector<Crypto::Hash> buildSparseChain(const Crypto::Hash& startBlockId) override;
      void on_synchronized() override;
