@@ -104,6 +104,8 @@ public:
 
   virtual bool addMessageQueue(MessageQueue<BlockchainMessage>& messageQueue) = 0;
   virtual bool removeMessageQueue(MessageQueue<BlockchainMessage>& messageQueue) = 0;
+
+  virtual bool getMixin(const Transaction& transaction, uint64_t& mixin) = 0;
 };
 
 } //namespace CryptoNote

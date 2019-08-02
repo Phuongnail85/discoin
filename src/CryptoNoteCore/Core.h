@@ -140,6 +140,8 @@ namespace CryptoNote {
      uint64_t getNextBlockDifficulty();
      uint64_t getTotalGeneratedAmount();
 
+     virtual bool getMixin(const Transaction& transaction, uint64_t& mixin) override;
+
    private:
      bool add_new_tx(const Transaction& tx, const Crypto::Hash& tx_hash, size_t blob_size, tx_verification_context& tvc, bool keeped_by_block);
      bool load_state_data();

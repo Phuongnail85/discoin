@@ -70,7 +70,9 @@ private:
   bool on_get_block_header_by_height(const COMMAND_RPC_GET_BLOCK_HEADER_BY_HEIGHT::request& request, COMMAND_RPC_GET_BLOCK_HEADER_BY_HEIGHT::response& response);
   bool on_get_blocks_list(const COMMAND_RPC_GET_BLOCKS_LIST::request& request, COMMAND_RPC_GET_BLOCKS_LIST::response& response);
   bool on_get_block_details(const COMMAND_RPC_GET_BLOCK_DETAILS::request& request, COMMAND_RPC_GET_BLOCK_DETAILS::response& response);
+  bool on_get_transaction(const COMMAND_RPC_GET_TRANSACTION_DETAILS::request& request, COMMAND_RPC_GET_TRANSACTION_DETAILS::response& response);
   bool on_get_mempool(const COMMAND_RPC_GET_MEMPOOL::request& request, COMMAND_RPC_GET_MEMPOOL::response& response);
+  bool on_get_transactions_by_payment_id(const COMMAND_RPC_GET_TRANSACTIONS_BY_PAYMENT_ID::request& request, COMMAND_RPC_GET_TRANSACTIONS_BY_PAYMENT_ID::response& response);
 
   void fill_block_header_response(const Block& blk, bool orphan_status, uint64_t height, const Crypto::Hash& hash, block_header_response& response);
 

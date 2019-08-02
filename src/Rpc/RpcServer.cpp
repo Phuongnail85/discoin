@@ -140,7 +140,9 @@ bool RpcServer::processJsonRpcRequest(const HttpRequest& request, HttpResponse& 
       { "getblockheaderbyheight", { makeMemberMethod(&RpcServer::on_get_block_header_by_height), false } },
       { "getblockslist", { makeMemberMethod(&RpcServer::on_get_blocks_list), false } },
       { "getblock", { makeMemberMethod(&RpcServer::on_get_block_details), false } },
+      { "gettransaction", { makeMemberMethod(&RpcServer::on_get_transaction), false } },
       { "getmempool", { makeMemberMethod(&RpcServer::on_get_mempool), false } },
+      { "gettransactionsbypaymentid", { makeMemberMethod(&RpcServer::on_get_transactions_by_payment_id), false } },
     };
 
     auto it = jsonRpcHandlers.find(jsonRequest.getMethod());
@@ -857,6 +859,96 @@ bool RpcServer::on_get_block_details(const COMMAND_RPC_GET_BLOCK_DETAILS::reques
   return true;
 }
 
+bool RpcServer::on_get_transaction(const COMMAND_RPC_GET_TRANSACTION_DETAILS::request& request, COMMAND_RPC_GET_TRANSACTION_DETAILS::response& response) {
+  Hash hash;
+
+  if (!parse_hash256(request.hash, hash)) {
+    throw JsonRpc::JsonRpcError{
+        CORE_RPC_ERROR_CODE_WRONG_PARAM,
+        "Failed to parse hex representation of transaction hash. Hex = " + request.hash + '.' };
+  }
+
+  std::vector<Crypto::Hash> tx_ids;
+  tx_ids.push_back(hash);
+
+  std::list<Crypto::Hash> missed_txs;
+  std::list<Transaction> txs;
+  m_core.getTransactions(tx_ids, txs, missed_txs, true);
+
+  if (1 == txs.size()) {
+    response.tx = txs.front();
+  } else {
+    throw JsonRpc::JsonRpcError{
+        CORE_RPC_ERROR_CODE_WRONG_PARAM,
+        "transaction wasn't found. Hash = " + request.hash + '.' };
+  }
+
+  Crypto::Hash blockHash;
+  uint32_t blockHeight;
+  if (m_core.getBlockContainingTx(hash, blockHash, blockHeight)) {
+    Block blk;
+    if (m_core.getBlockByHash(blockHash, blk)) {
+      size_t tx_cumulative_block_size;
+      m_core.getBlockSize(blockHash, tx_cumulative_block_size);
+      size_t blokBlobSize = getObjectBinarySize(blk);
+      size_t minerTxBlobSize = getObjectBinarySize(blk.baseTransaction);
+      block_short_response block_short;
+
+      block_short.timestamp = blk.timestamp;
+      block_short.height = blockHeight;
+      block_short.hash = Common::podToHex(blockHash);
+      block_short.cumul_size = blokBlobSize + tx_cumulative_block_size - minerTxBlobSize;
+      block_short.tx_count = blk.transactionHashes.size() + 1;
+      response.block = block_short;
+      response.txDetails.confirmations = m_protocolQuery.getObservedHeight() - blockHeight;
+    }
+  }
+
+  uint64_t amount_in = 0;
+  get_inputs_money_amount(response.tx, amount_in);
+  uint64_t amount_out = get_outs_money_amount(response.tx);
+
+  response.txDetails.hash = Common::podToHex(getObjectHash(response.tx));
+  response.txDetails.fee = amount_in - amount_out;
+  if (amount_in == 0)
+    response.txDetails.fee = 0;
+  response.txDetails.amount_out = amount_out;
+  response.txDetails.size = getObjectBinarySize(response.tx);
+
+  uint64_t mixin;
+  if (!m_core.getMixin(response.tx, mixin)) {
+    return false;
+  }
+  response.txDetails.mixin = mixin;
+
+  Crypto::Hash paymentId;
+  if (CryptoNote::getPaymentIdFromTxExtra(response.tx.extra, paymentId)) {
+    response.txDetails.paymentId = Common::podToHex(paymentId);
+  } else {
+    response.txDetails.paymentId = "";
+  }
+
+  response.txDetails.extra.raw = response.tx.extra;
+
+  std::vector<CryptoNote::TransactionExtraField> txExtraFields;
+  parseTransactionExtra(response.tx.extra, txExtraFields);
+  for (const CryptoNote::TransactionExtraField& field : txExtraFields) {
+    if (typeid(CryptoNote::TransactionExtraPadding) == field.type()) {
+      response.txDetails.extra.padding.push_back(std::move(boost::get<CryptoNote::TransactionExtraPadding>(field).size));
+    }
+    else if (typeid(CryptoNote::TransactionExtraPublicKey) == field.type()) {
+      //response.txDetails.extra.publicKey = std::move(boost::get<CryptoNote::TransactionExtraPublicKey>(field).publicKey);
+      response.txDetails.extra.publicKey = CryptoNote::getTransactionPublicKeyFromExtra(response.tx.extra);
+    }
+    else if (typeid(CryptoNote::TransactionExtraNonce) == field.type()) {
+      response.txDetails.extra.nonce.push_back(Common::toHex(boost::get<CryptoNote::TransactionExtraNonce>(field).nonce.data(), boost::get<CryptoNote::TransactionExtraNonce>(field).nonce.size()));
+    }
+  }
+
+  response.status = CORE_RPC_STATUS_OK;
+  return true;
+}
+
 bool RpcServer::on_get_mempool(const COMMAND_RPC_GET_MEMPOOL::request& request, COMMAND_RPC_GET_MEMPOOL::response& response) {
   auto pool = m_core.getMemoryPool();
   for (const CryptoNote::tx_memory_pool::TransactionDetails txd : pool) {
@@ -875,6 +967,44 @@ bool RpcServer::on_get_mempool(const COMMAND_RPC_GET_MEMPOOL::request& request, 
     mempool_transaction.last_failed_id = Common::podToHex(txd.lastFailedBlock.id);
     response.mempool.push_back(mempool_transaction);
   }
+  response.status = CORE_RPC_STATUS_OK;
+  return true;
+}
+
+bool RpcServer::on_get_transactions_by_payment_id(const COMMAND_RPC_GET_TRANSACTIONS_BY_PAYMENT_ID::request& request, COMMAND_RPC_GET_TRANSACTIONS_BY_PAYMENT_ID::response& response) {
+  if (!request.payment_id.size()) {
+    throw JsonRpc::JsonRpcError{ CORE_RPC_ERROR_CODE_WRONG_PARAM, "Wrong parameters, expected payment_id" };
+  }
+  logger(Logging::DEBUGGING, Logging::WHITE) << "RPC request came: Search by Payment ID: " << request.payment_id;
+
+  Crypto::Hash paymentId;
+  std::vector<Transaction> transactions;
+
+  if (!parse_hash256(request.payment_id, paymentId)) {
+    throw JsonRpc::JsonRpcError{
+        CORE_RPC_ERROR_CODE_WRONG_PARAM,
+        "Failed to parse Payment ID: " + request.payment_id + '.' };
+  }
+
+  if (!m_core.getTransactionsByPaymentId(paymentId, transactions)) {
+    throw JsonRpc::JsonRpcError{
+        CORE_RPC_ERROR_CODE_INTERNAL_ERROR,
+        "Internal error: can't get transactions by Payment ID: " + request.payment_id + '.' };
+  }
+
+  for (const Transaction& tx : transactions) {
+    transaction_short_response transaction_short;
+    uint64_t amount_in = 0;
+    get_inputs_money_amount(tx, amount_in);
+    uint64_t amount_out = get_outs_money_amount(tx);
+
+    transaction_short.hash = Common::podToHex(getObjectHash(tx));
+    transaction_short.fee = amount_in - amount_out;
+    transaction_short.amount_out = amount_out;
+    transaction_short.size = getObjectBinarySize(tx);
+    response.transactions.push_back(transaction_short);
+  }
+
   response.status = CORE_RPC_STATUS_OK;
   return true;
 }
