@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <map>
 
+#include <boost/container_hash/hash.hpp>
+
 #include "crypto/hash.h"
 #include "CryptoNoteBasic.h"
 
