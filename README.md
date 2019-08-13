@@ -1,15 +1,19 @@
 # How to compile the project
-### RHEL
-#### Install required software
+### Linux
+#### Install required software - RHEL
 ```
 $ sudo yum install gcc72.x86_64 gcc72-c++.x86_64 make glibc-static libxml2-devel
+```
+#### Install required software - Ubuntu
+```
+$ sudo apt-get install build-essential g++ cmake
 ```
 #### Install cmake 3
 This step is needed only if the cmake version distributed through yum is less than 3.10.
 Otherwise, simply use yum install cmake.
 ```
 $ wget https://cmake.org/files/v3.15/cmake-3.15.1.tar.gz
-$ tar jxf cmake-3.15.1.tar.gz
+$ tar xzf cmake-3.15.1.tar.gz
 $ cd cmake-3.15.1/
 $ ./bootstrap
 $ make
@@ -17,12 +21,12 @@ $ sudo make install
 ```
 #### Install boost
 ```
-$ wget -c https://sourceforge.net/projects/boost/files/boost/1.70.0/boost_1_70_0.tar.gz/download
+$ wget -c https://dl.bintray.com/boostorg/release/1.70.0/source/boost_1_70_0.tar.bz2
 $ tar jxf boost_1_70_0.tar.bz2
 $ cd boost_1_70_0
 $ sudo ./bootstrap.sh --prefix=/usr/local/
 $ ./b2
-$ sudo ./b2 install 
+$ sudo ./b2 install
 ```
 #### Compile Discoin binaries
 ```
