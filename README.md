@@ -1,56 +1,91 @@
 # How to compile the project
-### Linux
-#### Install required software - RHEL
+###  Ubuntu
+#### 1. Install required software
 ```
-$ sudo yum install gcc72.x86_64 gcc72-c++.x86_64 make glibc-static libxml2-devel
+sudo apt-get install build-essential libpthread-stubs0-dev
 ```
-#### Install required software - Ubuntu
+#### 2. Install gcc7 and cmake
+Ubuntu 18.04
 ```
-$ sudo apt-get install build-essential g++ cmake
+sudo apt-get install g++ cmake
 ```
-#### Install cmake 3
-This step is needed only if the cmake version distributed through yum is less than 3.10.
-Otherwise, simply use yum install cmake.
+Ubuntu 16.04
 ```
-$ wget https://cmake.org/files/v3.15/cmake-3.15.1.tar.gz
-$ tar xzf cmake-3.15.1.tar.gz
-$ cd cmake-3.15.1/
-$ ./bootstrap
-$ make
-$ sudo make install
+sudo apt-get install -y software-properties-common
+sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+sudo apt update
+sudo apt install g++-7 -y
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 60 --slave /usr/bin/g++ g++ /usr/bin/g++-7 
+sudo update-alternatives --config gcc
+
+sudo apt purge --auto-remove cmake
+wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | sudo apt-key add -
+sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ xenial main'
+sudo apt update
+sudo apt install cmake
 ```
-#### Install boost
+#### 3. Install libboost
 ```
-$ wget -c https://dl.bintray.com/boostorg/release/1.70.0/source/boost_1_70_0.tar.bz2
-$ tar jxf boost_1_70_0.tar.bz2
-$ cd boost_1_70_0
-$ sudo ./bootstrap.sh --prefix=/usr/local/
-$ ./b2
-$ sudo ./b2 install
+sudo add-apt-repository ppa:mhier/libboost-latest
+sudo apt update
+sudo apt install libboost1.70-dev
 ```
-#### Compile Discoin binaries
+#### 4. Download and install the Discoin binaries
 ```
-$ git clone https://github.com/discodery/discoin.git
-$ cd discoin
-$ cmake .
-$ make
+git clone https://github.com/discodery/discoin.git
+cd discoin
+cmake .
 ```
-or with multi-threading:
+Compile in a single thread:
 ```
-$ make -j
+make
 ```
+Or compile with multi-threading:
+```
+make -j
+```
+### RHEL
+### 1. Install the required software
+```
+sudo yum install gcc72.x86_64 gcc72-c++.x86_64 make glibc-static libxml2-devel
+```
+### 2. Install cmake 3
+If the cmake version distributed through yum is equal or above than 3.10:
+```
+sudo yum install cmake
+```
+Otherwise, download and compile cmake:
+```
+wget https://cmake.org/files/v3.15/cmake-3.15.1.tar.gz
+tar xzf cmake-3.15.1.tar.gz
+cd cmake-3.15.1/
+./bootstrap
+make
+sudo make install
+```
+#### 3. Compile and install libboost manually
+```
+wget -c https://dl.bintray.com/boostorg/release/1.70.0/source/boost_1_70_0.tar.bz2
+tar jxf boost_1_70_0.tar.bz2
+cd boost_1_70_0
+sudo ./bootstrap.sh --prefix=/usr/local/
+./b2
+sudo ./b2 install
+```
+#### 4. Download and install the Discoin binaries
+Same as for Ubuntu (see above).
 ### macOS
-#### Install required software
+#### 1. Install the required software
 ```
-$ brew install gcc cmake boost
+brew install gcc cmake boost
 ```
-#### Compile Discoin binaries
+#### 2. Download and compile the Discoin binaries
 ```
-$ git clone https://github.com/discodery/discoin.git
-$ cd discoin
-$ mkdir build
-$ cmake -S . -B build
-$ cd build
-$ make -j
+git clone https://github.com/discodery/discoin.git
+cd discoin
+mkdir build
+cmake -S . -B build
+cd build
+make -j
 ```
 Tested on macOS Mojave. After compile, the binaries can be found in discoin/build/src/.
