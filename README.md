@@ -106,7 +106,6 @@ vcpkg integrate install
 vcpkg install boost:x64-windows
 ```
 #### 3. Setup Visual Studio CMake
-```
 In Visual Studio, click go to "Project > CryptoNote CMake parameters".
 Create a new build configuration of type x64-Release.
 Copy/paste the following line in "CMake command arguments".
