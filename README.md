@@ -1,3 +1,12 @@
+# How to run the release binaries
+To run the pre-compiled binaries, some prerequisites can be necessary to install.
+### Ubuntu 16.04
+```
+sudo add-apt-repository ppa:mhier/libboost-latest
+sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+sudo apt update
+sudo apt install libboost1.70 g++-7 -y
+```
 # How to compile the project
 ###  Ubuntu
 #### 1. Install required software
