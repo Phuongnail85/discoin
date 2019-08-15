@@ -3,3 +3,7 @@
 /build
 /cmake-build-debug
 /cmake-build-release
+/.vs
+/out/build
+/CMakeSettings.json
+/vcpkg

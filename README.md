@@ -89,3 +89,28 @@ cd build
 make -j
 ```
 Tested on macOS Mojave. After compile, the binaries can be found in discoin/build/src/.
+### Windows 10
+#### Prerequisites
+Install Visual Studio Community 2019.
+#### 1. Download the Discoin sources
+```
+git clone https://github.com/discodery/discoin
+cd discoin
+```
+#### 2. Setup vcpkg
+```
+git clone https://github.com/Microsoft/vcpkg
+cd vcpkg 
+bootstrap-vcpkg.bat
+vcpkg integrate install
+vcpkg install boost:x64-windows
+```
+#### 3. Setup Visual Studio CMake
+```
+In Visual Studio, click go to "Project > CryptoNote CMake parameters".
+Create a new build configuration of type x64-Release.
+Copy/paste the following line in "CMake command arguments".
+```
+-DCMAKE_TOOLCHAIN_FILE=./vcpkg/scripts/buildsystems/vcpkg.cmake
+```
+Now go to "Generate > Generate all".
