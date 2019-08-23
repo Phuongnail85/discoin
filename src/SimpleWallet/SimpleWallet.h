@@ -26,27 +26,28 @@
 #include <System/Dispatcher.h>
 #include <System/Ipv4Address.h>
 
-namespace CryptoNote
-{
-  /************************************************************************/
-  /*                                                                      */
-  /************************************************************************/
-  class simple_wallet : public CryptoNote::INodeObserver, public CryptoNote::IWalletLegacyObserver, public CryptoNote::INodeRpcProxyObserver {
+namespace CryptoNote {
+  class simple_wallet : public CryptoNote::INodeObserver,
+                        public CryptoNote::IWalletLegacyObserver,
+                        public CryptoNote::INodeRpcProxyObserver {
   public:
-    simple_wallet(System::Dispatcher& dispatcher, const CryptoNote::Currency& currency, Logging::LoggerManager& log);
+    simple_wallet(System::Dispatcher &dispatcher, const CryptoNote::Currency &currency, Logging::LoggerManager &log);
 
-    bool init(const boost::program_options::variables_map& vm);
+    bool init(const boost::program_options::variables_map &vm);
+
     bool deinit();
+
     bool run();
+
     void stop();
 
     bool process_command(const std::vector<std::string> &args);
+
     std::string get_commands_str();
 
-    const CryptoNote::Currency& currency() const { return m_currency; }
+    const CryptoNote::Currency &currency() const { return m_currency; }
 
   private:
-
     Logging::LoggerMessage success_msg_writer(bool color = false) {
       return logger(Logging::INFO, color ? Logging::GREEN : Logging::DEFAULT);
     }
@@ -57,61 +58,70 @@ namespace CryptoNote
       return msg;
     }
 
-    void handle_command_line(const boost::program_options::variables_map& vm);
+    void handle_command_line(const boost::program_options::variables_map &vm);
 
-    bool run_console_handler();
+    bool new_wallet(const std::string &walletFile, const std::string &password);
 
-    bool new_wallet(const std::string &wallet_file, const std::string& password);
-    bool open_wallet(const std::string &wallet_file, const std::string& password);
+    bool new_wallet(Crypto::SecretKey &secretKey, Crypto::SecretKey &viewKey, const std::string &walletFile, const std::string& password);
+
     bool close_wallet();
 
     bool help(const std::vector<std::string> &args = std::vector<std::string>());
-    bool exit(const std::vector<std::string> &args);
-    bool start_mining(const std::vector<std::string> &args);
-    bool stop_mining(const std::vector<std::string> &args);
-    bool show_balance(const std::vector<std::string> &args = std::vector<std::string>());
-    bool show_incoming_transfers(const std::vector<std::string> &args);
-    bool show_payments(const std::vector<std::string> &args);
-    bool show_blockchain_height(const std::vector<std::string> &args);
-    bool listTransfers(const std::vector<std::string> &args);
-    bool transfer(const std::vector<std::string> &args);
-    bool print_address(const std::vector<std::string> &args = std::vector<std::string>());
-    bool save(const std::vector<std::string> &args);
-    bool reset(const std::vector<std::string> &args);
-    bool set_log(const std::vector<std::string> &args);
 
-    bool ask_wallet_create_if_needed();
+    bool exit(const std::vector<std::string> &args);
+
+    bool start_mining(const std::vector<std::string> &args);
+
+    bool stop_mining(const std::vector<std::string> &args);
+
+    bool show_balance(const std::vector<std::string> &args = std::vector<std::string>());
+
+    bool show_incoming_transfers(const std::vector<std::string> &args);
+
+    bool show_payments(const std::vector<std::string> &args);
+
+    bool show_blockchain_height(const std::vector<std::string> &args);
+
+    bool listTransfers(const std::vector<std::string> &args);
+
+    bool transfer(const std::vector<std::string> &args);
+
+    bool print_address(const std::vector<std::string> &args = std::vector<std::string>());
+
+    bool print_keys(const std::vector<std::string> &args = std::vector<std::string>());
+
+    bool save(const std::vector<std::string> &args);
+
+    bool reset(const std::vector<std::string> &args);
+
+    bool set_log(const std::vector<std::string> &args);
 
     void printConnectionError() const;
 
     //---------------- IWalletLegacyObserver -------------------------
-    virtual void initCompleted(std::error_code result) override;
-    virtual void externalTransactionCreated(CryptoNote::TransactionId transactionId) override;
-    virtual void synchronizationCompleted(std::error_code result) override;
-    virtual void synchronizationProgressUpdated(uint32_t current, uint32_t total) override;
+    void initCompleted(std::error_code result) override;
+
+    void externalTransactionCreated(CryptoNote::TransactionId transactionId) override;
+
+    void synchronizationCompleted(std::error_code result) override;
+
+    void synchronizationProgressUpdated(uint32_t current, uint32_t total) override;
     //----------------------------------------------------------
 
     //----------------- INodeRpcProxyObserver --------------------------
-    virtual void connectionStatusUpdated(bool connected) override;
+    void connectionStatusUpdated(bool connected) override;
     //----------------------------------------------------------
 
-    friend class refresh_progress_reporter_t;
-
-    class refresh_progress_reporter_t
-    {
+    class refresh_progress_reporter_t {
     public:
-      refresh_progress_reporter_t(CryptoNote::simple_wallet& simple_wallet)
-        : m_simple_wallet(simple_wallet)
-        , m_blockchain_height(0)
-        , m_blockchain_height_update_time()
-        , m_print_time()
-      {
+      explicit refresh_progress_reporter_t(CryptoNote::simple_wallet &simple_wallet)
+          : m_simple_wallet(simple_wallet), m_blockchain_height(0), m_blockchain_height_update_time(), m_print_time() {
       }
 
-      void update(uint64_t height, bool force = false)
-      {
+      void update(uint64_t height, bool force = false) {
         auto current_time = std::chrono::system_clock::now();
-        if (std::chrono::seconds(m_simple_wallet.currency().difficultyTarget() / 2) < current_time - m_blockchain_height_update_time ||
+        if (std::chrono::seconds(m_simple_wallet.currency().difficultyTarget() / 2) <
+            current_time - m_blockchain_height_update_time ||
             m_blockchain_height <= height) {
           update_blockchain_height();
           m_blockchain_height = (std::max)(m_blockchain_height, height);
@@ -124,15 +134,14 @@ namespace CryptoNote
       }
 
     private:
-      void update_blockchain_height()
-      {
+      void update_blockchain_height() {
         uint64_t blockchain_height = m_simple_wallet.m_node->getLastLocalBlockHeight();
         m_blockchain_height = blockchain_height;
         m_blockchain_height_update_time = std::chrono::system_clock::now();
       }
 
     private:
-      CryptoNote::simple_wallet& m_simple_wallet;
+      CryptoNote::simple_wallet &m_simple_wallet;
       uint64_t m_blockchain_height;
       std::chrono::system_clock::time_point m_blockchain_height_update_time;
       std::chrono::system_clock::time_point m_print_time;
@@ -141,7 +150,10 @@ namespace CryptoNote
   private:
     std::string m_wallet_file_arg;
     std::string m_generate_new;
-    std::string m_import_path;
+
+    std::string m_import_from_keys;
+    std::string m_import_view_secret_key_arg;
+    std::string m_import_spend_secret_key_arg;
 
     std::string m_daemon_address;
     std::string m_daemon_host;
@@ -152,9 +164,9 @@ namespace CryptoNote
     std::unique_ptr<std::promise<std::error_code>> m_initResultPromise;
 
     Common::ConsoleHandler m_consoleHandler;
-    const CryptoNote::Currency& m_currency;
-    Logging::LoggerManager& logManager;
-    System::Dispatcher& m_dispatcher;
+    const CryptoNote::Currency &m_currency;
+    Logging::LoggerManager &logManager;
+    System::Dispatcher &m_dispatcher;
     Logging::LoggerRef logger;
 
     std::unique_ptr<CryptoNote::NodeRpcProxy> m_node;

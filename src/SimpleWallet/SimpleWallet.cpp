@@ -53,374 +53,424 @@ namespace po = boost::program_options;
 
 namespace {
 
-const command_line::arg_descriptor<std::string> arg_wallet_file = { "wallet-file", "Use wallet <arg>", "" };
-const command_line::arg_descriptor<std::string> arg_generate_new_wallet = { "generate-new-wallet", "Generate new wallet and save it to <arg>", "" };
-const command_line::arg_descriptor<std::string> arg_daemon_address = { "daemon-address", "Use daemon instance at <host>:<port>", "" };
-const command_line::arg_descriptor<std::string> arg_daemon_host = { "daemon-host", "Use daemon instance at host <arg> instead of localhost", "" };
-const command_line::arg_descriptor<std::string> arg_password = { "password", "Wallet password", "", true };
-const command_line::arg_descriptor<uint16_t> arg_daemon_port = { "daemon-port", "Use daemon instance at port <arg> instead of 8081", 0 };
-const command_line::arg_descriptor<uint32_t> arg_log_level = { "set_log", "", INFO, true };
-const command_line::arg_descriptor<bool> arg_testnet = { "testnet", "Used to deploy test nets. The daemon must be launched with --testnet flag", false };
-const command_line::arg_descriptor< std::vector<std::string> > arg_command = { "command", "" };
+  const command_line::arg_descriptor<std::string> arg_wallet_file = {
+      "wallet-file",
+      "Use wallet <arg>",
+      ""
+  };
+  const command_line::arg_descriptor<std::string> arg_generate_new_wallet = {
+      "generate-new-wallet",
+      "Generate new wallet and save it to <arg>",
+      ""
+  };
+  const command_line::arg_descriptor<std::string> arg_import_view_secret_key = {
+      "import-view-secret-key",
+      "Import view secret key",
+      ""
+  };
+  const command_line::arg_descriptor<std::string> arg_import_spend_secret_key = {
+      "import-spend-secret-key",
+      "Import spend secret key",
+      ""
+  };
+  const command_line::arg_descriptor<std::string> arg_daemon_address = {
+      "daemon-address",
+      "Use daemon instance at <host>:<port>",
+      ""
+  };
+  const command_line::arg_descriptor<std::string> arg_daemon_host = {
+      "daemon-host",
+      "Use daemon instance at host <arg> instead of localhost",
+      ""
+  };
+  const command_line::arg_descriptor<std::string> arg_password = {
+      "password",
+      "Wallet password",
+      "",
+      true
+  };
+  const command_line::arg_descriptor<uint16_t> arg_daemon_port = {
+      "daemon-port",
+      "Use daemon instance at port <arg> instead of 8081",
+      0
+  };
+  const command_line::arg_descriptor<uint32_t> arg_log_level = {
+      "set_log",
+      "",
+      INFO,
+      true
+  };
+  const command_line::arg_descriptor<bool> arg_testnet = {
+      "testnet",
+      "Used to deploy test nets. The daemon must be launched with --testnet flag",
+      false
+  };
+  const command_line::arg_descriptor<std::vector<std::string> > arg_command = {
+      "command",
+      ""
+  };
 
+  bool parseUrlAddress(const std::string &url, std::string &address, uint16_t &port) {
+    auto pos = url.find("://");
+    size_t addrStart = 0;
 
-bool parseUrlAddress(const std::string& url, std::string& address, uint16_t& port) {
-  auto pos = url.find("://");
-  size_t addrStart = 0;
-
-  if (pos != std::string::npos) {
-    addrStart = pos + 3;
-  }
-
-  auto addrEnd = url.find(':', addrStart);
-
-  if (addrEnd != std::string::npos) {
-    auto portEnd = url.find('/', addrEnd);
-    port = Common::fromString<uint16_t>(url.substr(
-      addrEnd + 1, portEnd == std::string::npos ? std::string::npos : portEnd - addrEnd - 1));
-  } else {
-    addrEnd = url.find('/');
-    port = 80;
-  }
-
-  address = url.substr(addrStart, addrEnd - addrStart);
-  return true;
-}
-
-
-inline std::string interpret_rpc_response(bool ok, const std::string& status) {
-  std::string err;
-  if (ok) {
-    if (status == CORE_RPC_STATUS_BUSY) {
-      err = "daemon is busy. Please try later";
-    } else if (status != CORE_RPC_STATUS_OK) {
-      err = status;
-    }
-  } else {
-    err = "possible lost connection to daemon";
-  }
-  return err;
-}
-
-template <typename IterT, typename ValueT = typename IterT::value_type>
-class ArgumentReader {
-public:
-
-  ArgumentReader(IterT begin, IterT end) :
-    m_begin(begin), m_end(end), m_cur(begin) {
-  }
-
-  bool eof() const {
-    return m_cur == m_end;
-  }
-
-  ValueT next() {
-    if (eof()) {
-      throw std::runtime_error("unexpected end of arguments");
-    }
-
-    return *m_cur++;
-  }
-
-private:
-
-  IterT m_cur;
-  IterT m_begin;
-  IterT m_end;
-};
-
-struct TransferCommand {
-  const CryptoNote::Currency& m_currency;
-  size_t fake_outs_count;
-  std::vector<CryptoNote::WalletLegacyTransfer> dsts;
-  std::vector<uint8_t> extra;
-  uint64_t fee;
-
-  TransferCommand(const CryptoNote::Currency& currency) :
-    m_currency(currency), fake_outs_count(0), fee(currency.minimumFee()) {
-  }
-
-  bool parseArguments(LoggerRef& logger, const std::vector<std::string> &args) {
-
-    ArgumentReader<std::vector<std::string>::const_iterator> ar(args.begin(), args.end());
-
-    try {
-
-      auto mixin_str = ar.next();
-
-      if (!Common::fromString(mixin_str, fake_outs_count)) {
-        logger(ERROR, BRIGHT_RED) << "mixin_count should be non-negative integer, got " << mixin_str;
-        return false;
-      }
-
-      while (!ar.eof()) {
-
-        auto arg = ar.next();
-
-        if (arg.size() && arg[0] == '-') {
-
-          const auto& value = ar.next();
-
-          if (arg == "-p") {
-            if (!createTxExtraWithPaymentId(value, extra)) {
-              logger(ERROR, BRIGHT_RED) << "payment ID has invalid format: \"" << value << "\", expected 64-character string";
-              return false;
-            }
-          } else if (arg == "-f") {
-            bool ok = m_currency.parseAmount(value, fee);
-            if (!ok) {
-              logger(ERROR, BRIGHT_RED) << "Fee value is invalid: " << value;
-              return false;
-            }
-
-            if (fee < m_currency.minimumFee()) {
-              logger(ERROR, BRIGHT_RED) << "Fee value is less than minimum: " << m_currency.minimumFee();
-              return false;
-            }
-          }
-        } else {
-          WalletLegacyTransfer destination;
-          CryptoNote::TransactionDestinationEntry de;
-
-          if (!m_currency.parseAccountAddressString(arg, de.addr)) {
-            Crypto::Hash paymentId;
-            if (CryptoNote::parsePaymentId(arg, paymentId)) {
-              logger(ERROR, BRIGHT_RED) << "Invalid payment ID usage. Please, use -p <payment_id>. See help for details.";
-            } else {
-              logger(ERROR, BRIGHT_RED) << "Wrong address: " << arg;
-            }
-
-            return false;
-          }
-
-          auto value = ar.next();
-          bool ok = m_currency.parseAmount(value, de.amount);
-          if (!ok || 0 == de.amount) {
-            logger(ERROR, BRIGHT_RED) << "amount is wrong: " << arg << ' ' << value <<
-              ", expected number from 0 to " << m_currency.formatAmount(std::numeric_limits<uint64_t>::max());
-            return false;
-          }
-          destination.address = arg;
-          destination.amount = de.amount;
-
-          dsts.push_back(destination);
-        }
-      }
-
-      if (dsts.empty()) {
-        logger(ERROR, BRIGHT_RED) << "At least one destination address is required";
-        return false;
-      }
-    } catch (const std::exception& e) {
-      logger(ERROR, BRIGHT_RED) << e.what();
-      return false;
+    if (pos != std::string::npos) {
+      addrStart = pos + 3;
     }
 
+    auto addrEnd = url.find(':', addrStart);
+
+    if (addrEnd != std::string::npos) {
+      auto portEnd = url.find('/', addrEnd);
+      port = Common::fromString<uint16_t>(url.substr(
+          addrEnd + 1, portEnd == std::string::npos ? std::string::npos : portEnd - addrEnd - 1));
+    } else {
+      addrEnd = url.find('/');
+      port = 80;
+    }
+
+    address = url.substr(addrStart, addrEnd - addrStart);
     return true;
   }
-};
 
-JsonValue buildLoggerConfiguration(Level level, const std::string& logfile) {
-  JsonValue loggerConfiguration(JsonValue::OBJECT);
-  loggerConfiguration.insert("globalLevel", static_cast<int64_t>(level));
-
-  JsonValue& cfgLoggers = loggerConfiguration.insert("loggers", JsonValue::ARRAY);
-
-  JsonValue& consoleLogger = cfgLoggers.pushBack(JsonValue::OBJECT);
-  consoleLogger.insert("type", "console");
-  consoleLogger.insert("level", static_cast<int64_t>(TRACE));
-  consoleLogger.insert("pattern", "");
-
-  JsonValue& fileLogger = cfgLoggers.pushBack(JsonValue::OBJECT);
-  fileLogger.insert("type", "file");
-  fileLogger.insert("filename", logfile);
-  fileLogger.insert("level", static_cast<int64_t>(TRACE));
-
-  return loggerConfiguration;
-}
-
-std::error_code initAndLoadWallet(IWalletLegacy& wallet, std::istream& walletFile, const std::string& password) {
-  WalletHelper::InitWalletResultObserver initObserver;
-  std::future<std::error_code> f_initError = initObserver.initResult.get_future();
-
-  WalletHelper::IWalletRemoveObserverGuard removeGuard(wallet, initObserver);
-  wallet.initAndLoad(walletFile, password);
-  auto initError = f_initError.get();
-
-  return initError;
-}
-
-std::string tryToOpenWalletOrLoadKeysOrThrow(LoggerRef& logger, std::unique_ptr<IWalletLegacy>& wallet, const std::string& walletFile, const std::string& password) {
-  std::string keys_file, walletFileName;
-  WalletHelper::prepareFileNames(walletFile, keys_file, walletFileName);
-
-  boost::system::error_code ignore;
-  bool keysExists = boost::filesystem::exists(keys_file, ignore);
-  bool walletExists = boost::filesystem::exists(walletFileName, ignore);
-  if (!walletExists && !keysExists && boost::filesystem::exists(walletFile, ignore)) {
-    boost::system::error_code renameEc;
-    boost::filesystem::rename(walletFile, walletFileName, renameEc);
-    if (renameEc) {
-      throw std::runtime_error("failed to rename file '" + walletFile + "' to '" + walletFileName + "': " + renameEc.message());
+  inline std::string interpret_rpc_response(bool ok, const std::string &status) {
+    std::string err;
+    if (ok) {
+      if (status == CORE_RPC_STATUS_BUSY) {
+        err = "daemon is busy. Please try later";
+      } else if (status != CORE_RPC_STATUS_OK) {
+        err = status;
+      }
+    } else {
+      err = "possible lost connection to daemon";
     }
-
-    walletExists = true;
+    return err;
   }
 
-  if (walletExists) {
-    logger(INFO) << "Loading wallet...";
-    std::ifstream walletFile;
-    walletFile.open(walletFileName, std::ios_base::binary | std::ios_base::in);
-    if (walletFile.fail()) {
-      throw std::runtime_error("error opening wallet file '" + walletFileName + "'");
+  template<typename IterT, typename ValueT = typename IterT::value_type>
+  class ArgumentReader {
+  public:
+    ArgumentReader(IterT begin, IterT end) :
+        m_begin(begin), m_end(end), m_cur(begin) {
     }
 
-    auto initError = initAndLoadWallet(*wallet, walletFile, password);
+    bool eof() const {
+      return m_cur == m_end;
+    }
 
-    walletFile.close();
-    if (initError) { //bad password, or legacy format
-      if (keysExists) {
-        std::stringstream ss;
-        CryptoNote::importLegacyKeys(keys_file, password, ss);
-        boost::filesystem::rename(keys_file, keys_file + ".back");
-        boost::filesystem::rename(walletFileName, walletFileName + ".back");
-
-        initError = initAndLoadWallet(*wallet, ss, password);
-        if (initError) {
-          throw std::runtime_error("failed to load wallet: " + initError.message());
-        }
-
-        logger(INFO) << "Storing wallet...";
-
-        try {
-          CryptoNote::WalletHelper::storeWallet(*wallet, walletFileName);
-        } catch (std::exception& e) {
-          logger(ERROR, BRIGHT_RED) << "Failed to store wallet: " << e.what();
-          throw std::runtime_error("error saving wallet file '" + walletFileName + "'");
-        }
-
-        logger(INFO, BRIGHT_GREEN) << "Stored ok";
-        return walletFileName;
-      } else { // no keys, wallet error loading
-        throw std::runtime_error("can't load wallet file '" + walletFileName + "', check password");
+    ValueT next() {
+      if (eof()) {
+        throw std::runtime_error("unexpected end of arguments");
       }
-    } else { //new wallet ok 
-      return walletFileName;
-    }
-  } else if (keysExists) { //wallet not exists but keys presented
-    std::stringstream ss;
-    CryptoNote::importLegacyKeys(keys_file, password, ss);
-    boost::filesystem::rename(keys_file, keys_file + ".back");
 
+      return *m_cur++;
+    }
+
+  private:
+    IterT m_cur;
+    IterT m_begin;
+    IterT m_end;
+  };
+
+  struct TransferCommand {
+    const CryptoNote::Currency &m_currency;
+    size_t fake_outs_count;
+    std::vector<CryptoNote::WalletLegacyTransfer> dsts;
+    std::vector<uint8_t> extra;
+    uint64_t fee;
+
+    TransferCommand(const CryptoNote::Currency &currency) :
+        m_currency(currency), fake_outs_count(0), fee(currency.minimumFee()) {
+    }
+
+    bool parseArguments(LoggerRef &logger, const std::vector<std::string> &args) {
+
+      ArgumentReader<std::vector<std::string>::const_iterator> ar(args.begin(), args.end());
+
+      try {
+        auto mixin_str = ar.next();
+
+        if (!Common::fromString(mixin_str, fake_outs_count)) {
+          logger(ERROR, BRIGHT_RED) << "mixin_count should be non-negative integer, got " << mixin_str;
+          return false;
+        }
+
+        while (!ar.eof()) {
+
+          auto arg = ar.next();
+
+          if (arg.size() && arg[0] == '-') {
+
+            const auto &value = ar.next();
+
+            if (arg == "-p") {
+              if (!createTxExtraWithPaymentId(value, extra)) {
+                logger(ERROR, BRIGHT_RED) << "payment ID has invalid format: \"" << value
+                                          << "\", expected 64-character string";
+                return false;
+              }
+            } else if (arg == "-f") {
+              bool ok = m_currency.parseAmount(value, fee);
+              if (!ok) {
+                logger(ERROR, BRIGHT_RED) << "Fee value is invalid: " << value;
+                return false;
+              }
+
+              if (fee < m_currency.minimumFee()) {
+                logger(ERROR, BRIGHT_RED) << "Fee value is less than minimum: " << m_currency.minimumFee();
+                return false;
+              }
+            }
+          } else {
+            WalletLegacyTransfer destination;
+            CryptoNote::TransactionDestinationEntry de;
+
+            if (!m_currency.parseAccountAddressString(arg, de.addr)) {
+              Crypto::Hash paymentId;
+              if (CryptoNote::parsePaymentId(arg, paymentId)) {
+                logger(ERROR, BRIGHT_RED)
+                    << "Invalid payment ID usage. Please, use -p <payment_id>. See help for details.";
+              } else {
+                logger(ERROR, BRIGHT_RED) << "Wrong address: " << arg;
+              }
+
+              return false;
+            }
+
+            auto value = ar.next();
+            bool ok = m_currency.parseAmount(value, de.amount);
+            if (!ok || 0 == de.amount) {
+              logger(ERROR, BRIGHT_RED) << "amount is wrong: " << arg << ' ' << value <<
+                                        ", expected number from 0 to "
+                                        << m_currency.formatAmount(std::numeric_limits<uint64_t>::max());
+              return false;
+            }
+            destination.address = arg;
+            destination.amount = de.amount;
+
+            dsts.push_back(destination);
+          }
+        }
+
+        if (dsts.empty()) {
+          logger(ERROR, BRIGHT_RED) << "At least one destination address is required";
+          return false;
+        }
+      } catch (const std::exception &e) {
+        logger(ERROR, BRIGHT_RED) << e.what();
+        return false;
+      }
+
+      return true;
+    }
+  };
+
+  JsonValue buildLoggerConfiguration(Level level, const std::string &logfile) {
+    JsonValue loggerConfiguration(JsonValue::OBJECT);
+    loggerConfiguration.insert("globalLevel", static_cast<int64_t>(level));
+
+    JsonValue &cfgLoggers = loggerConfiguration.insert("loggers", JsonValue::ARRAY);
+
+    JsonValue &consoleLogger = cfgLoggers.pushBack(JsonValue::OBJECT);
+    consoleLogger.insert("type", "console");
+    consoleLogger.insert("level", static_cast<int64_t>(TRACE));
+    consoleLogger.insert("pattern", "");
+
+    JsonValue &fileLogger = cfgLoggers.pushBack(JsonValue::OBJECT);
+    fileLogger.insert("type", "file");
+    fileLogger.insert("filename", logfile);
+    fileLogger.insert("level", static_cast<int64_t>(TRACE));
+
+    return loggerConfiguration;
+  }
+
+  std::error_code initAndLoadWallet(IWalletLegacy &wallet, std::istream &walletFile, const std::string &password) {
     WalletHelper::InitWalletResultObserver initObserver;
     std::future<std::error_code> f_initError = initObserver.initResult.get_future();
 
-    WalletHelper::IWalletRemoveObserverGuard removeGuard(*wallet, initObserver);
-    wallet->initAndLoad(ss, password);
+    WalletHelper::IWalletRemoveObserverGuard removeGuard(wallet, initObserver);
+    wallet.initAndLoad(walletFile, password);
     auto initError = f_initError.get();
 
-    removeGuard.removeObserver();
-    if (initError) {
-      throw std::runtime_error("failed to load wallet: " + initError.message());
+    return initError;
+  }
+
+  std::string tryToOpenWalletOrLoadKeysOrThrow(LoggerRef &logger, std::unique_ptr<IWalletLegacy> &wallet,
+                                               const std::string &walletFile, const std::string &password) {
+    std::string keys_file, walletFileName;
+    WalletHelper::prepareFileNames(walletFile, keys_file, walletFileName);
+
+    boost::system::error_code ignore;
+    bool keysExists = boost::filesystem::exists(keys_file, ignore);
+    bool walletExists = boost::filesystem::exists(walletFileName, ignore);
+    if (!walletExists && !keysExists && boost::filesystem::exists(walletFile, ignore)) {
+      boost::system::error_code renameEc;
+      boost::filesystem::rename(walletFile, walletFileName, renameEc);
+      if (renameEc) {
+        throw std::runtime_error(
+            "failed to rename file '" + walletFile + "' to '" + walletFileName + "': " + renameEc.message());
+      }
+
+      walletExists = true;
     }
 
-    logger(INFO) << "Storing wallet...";
+    if (walletExists) {
+      logger(INFO) << "Loading wallet...";
+      std::ifstream loadedWalletFile;
+      loadedWalletFile.open(walletFileName, std::ios_base::binary | std::ios_base::in);
+      if (loadedWalletFile.fail()) {
+        throw std::runtime_error("error opening wallet file '" + walletFileName + "'");
+      }
 
-    try {
-      CryptoNote::WalletHelper::storeWallet(*wallet, walletFileName);
-    } catch(std::exception& e) {
-      logger(ERROR, BRIGHT_RED) << "Failed to store wallet: " << e.what();
-      throw std::runtime_error("error saving wallet file '" + walletFileName + "'");
+      auto initError = initAndLoadWallet(*wallet, loadedWalletFile, password);
+
+      loadedWalletFile.close();
+      if (initError) { //bad password, or legacy format
+        if (keysExists) {
+          std::stringstream ss;
+          CryptoNote::importLegacyKeys(keys_file, password, ss);
+          boost::filesystem::rename(keys_file, keys_file + ".back");
+          boost::filesystem::rename(walletFileName, walletFileName + ".back");
+
+          initError = initAndLoadWallet(*wallet, ss, password);
+          if (initError) {
+            throw std::runtime_error("failed to load wallet: " + initError.message());
+          }
+
+          logger(INFO) << "Storing wallet...";
+
+          try {
+            CryptoNote::WalletHelper::storeWallet(*wallet, walletFileName);
+          } catch (std::exception &e) {
+            logger(ERROR, BRIGHT_RED) << "Failed to store wallet: " << e.what();
+            throw std::runtime_error("error saving wallet file '" + walletFileName + "'");
+          }
+
+          logger(INFO, BRIGHT_GREEN) << "Stored ok";
+          return walletFileName;
+        } else { // no keys, wallet error loading
+          throw std::runtime_error("can't load wallet file '" + walletFileName + "', check password");
+        }
+      } else { //new wallet ok
+        return walletFileName;
+      }
+    } else if (keysExists) { //wallet not exists but keys presented
+      std::stringstream ss;
+      CryptoNote::importLegacyKeys(keys_file, password, ss);
+      boost::filesystem::rename(keys_file, keys_file + ".back");
+
+      WalletHelper::InitWalletResultObserver initObserver;
+      std::future<std::error_code> f_initError = initObserver.initResult.get_future();
+
+      WalletHelper::IWalletRemoveObserverGuard removeGuard(*wallet, initObserver);
+      wallet->initAndLoad(ss, password);
+      auto initError = f_initError.get();
+
+      removeGuard.removeObserver();
+      if (initError) {
+        throw std::runtime_error("failed to load wallet: " + initError.message());
+      }
+
+      logger(INFO) << "Storing wallet...";
+
+      try {
+        CryptoNote::WalletHelper::storeWallet(*wallet, walletFileName);
+      } catch (std::exception &e) {
+        logger(ERROR, BRIGHT_RED) << "Failed to store wallet: " << e.what();
+        throw std::runtime_error("error saving wallet file '" + walletFileName + "'");
+      }
+
+      logger(INFO, BRIGHT_GREEN) << "Stored ok";
+      return walletFileName;
+    } else { //no wallet no keys
+      throw std::runtime_error("wallet file '" + walletFileName + "' is not found");
+    }
+  }
+
+  std::string makeCenteredString(size_t width, const std::string &text) {
+    if (text.size() >= width) {
+      return text;
     }
 
-    logger(INFO, BRIGHT_GREEN) << "Stored ok";
-    return walletFileName;
-  } else { //no wallet no keys
-    throw std::runtime_error("wallet file '" + walletFileName + "' is not found");
-  }
-}
-
-std::string makeCenteredString(size_t width, const std::string& text) {
-  if (text.size() >= width) {
-    return text;
+    size_t offset = (width - text.size() + 1) / 2;
+    return std::string(offset, ' ') + text + std::string(width - text.size() - offset, ' ');
   }
 
-  size_t offset = (width - text.size() + 1) / 2;
-  return std::string(offset, ' ') + text + std::string(width - text.size() - offset, ' ');
-}
+  const size_t TIMESTAMP_MAX_WIDTH = 19;
+  const size_t HASH_MAX_WIDTH = 64;
+  const size_t TOTAL_AMOUNT_MAX_WIDTH = 20;
+  const size_t FEE_MAX_WIDTH = 14;
+  const size_t BLOCK_MAX_WIDTH = 7;
+  const size_t UNLOCK_TIME_MAX_WIDTH = 11;
 
-const size_t TIMESTAMP_MAX_WIDTH = 19;
-const size_t HASH_MAX_WIDTH = 64;
-const size_t TOTAL_AMOUNT_MAX_WIDTH = 20;
-const size_t FEE_MAX_WIDTH = 14;
-const size_t BLOCK_MAX_WIDTH = 7;
-const size_t UNLOCK_TIME_MAX_WIDTH = 11;
+  void printListTransfersHeader(LoggerRef &logger) {
+    std::string header = makeCenteredString(TIMESTAMP_MAX_WIDTH, "timestamp (UTC)") + "  ";
+    header += makeCenteredString(HASH_MAX_WIDTH, "hash") + "  ";
+    header += makeCenteredString(TOTAL_AMOUNT_MAX_WIDTH, "total amount") + "  ";
+    header += makeCenteredString(FEE_MAX_WIDTH, "fee") + "  ";
+    header += makeCenteredString(BLOCK_MAX_WIDTH, "block") + "  ";
+    header += makeCenteredString(UNLOCK_TIME_MAX_WIDTH, "unlock time");
 
-void printListTransfersHeader(LoggerRef& logger) {
-  std::string header = makeCenteredString(TIMESTAMP_MAX_WIDTH, "timestamp (UTC)") + "  ";
-  header += makeCenteredString(HASH_MAX_WIDTH, "hash") + "  ";
-  header += makeCenteredString(TOTAL_AMOUNT_MAX_WIDTH, "total amount") + "  ";
-  header += makeCenteredString(FEE_MAX_WIDTH, "fee") + "  ";
-  header += makeCenteredString(BLOCK_MAX_WIDTH, "block") + "  ";
-  header += makeCenteredString(UNLOCK_TIME_MAX_WIDTH, "unlock time");
-
-  logger(INFO) << header;
-  logger(INFO) << std::string(header.size(), '-');
-}
-
-void printListTransfersItem(LoggerRef& logger, const WalletLegacyTransaction& txInfo, IWalletLegacy& wallet, const Currency& currency) {
-  std::vector<uint8_t> extraVec = Common::asBinaryArray(txInfo.extra);
-
-  Crypto::Hash paymentId;
-  std::string paymentIdStr = (getPaymentIdFromTxExtra(extraVec, paymentId) && paymentId != NULL_HASH ? Common::podToHex(paymentId) : "");
-
-  char timeString[TIMESTAMP_MAX_WIDTH + 1];
-  time_t timestamp = static_cast<time_t>(txInfo.timestamp);
-  if (std::strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S", std::gmtime(&timestamp)) == 0) {
-    throw std::runtime_error("time buffer is too small");
+    logger(INFO) << header;
+    logger(INFO) << std::string(header.size(), '-');
   }
 
-  std::string rowColor = txInfo.totalAmount < 0 ? MAGENTA : GREEN;
-  logger(INFO, rowColor)
-    << std::setw(TIMESTAMP_MAX_WIDTH) << timeString
-    << "  " << std::setw(HASH_MAX_WIDTH) << Common::podToHex(txInfo.hash)
-    << "  " << std::setw(TOTAL_AMOUNT_MAX_WIDTH) << currency.formatAmount(txInfo.totalAmount)
-    << "  " << std::setw(FEE_MAX_WIDTH) << currency.formatAmount(txInfo.fee)
-    << "  " << std::setw(BLOCK_MAX_WIDTH) << txInfo.blockHeight
-    << "  " << std::setw(UNLOCK_TIME_MAX_WIDTH) << txInfo.unlockTime;
+  void printListTransfersItem(LoggerRef &logger, const WalletLegacyTransaction &txInfo, IWalletLegacy &wallet,
+                              const Currency &currency) {
+    std::vector<uint8_t> extraVec = Common::asBinaryArray(txInfo.extra);
 
-  if (!paymentIdStr.empty()) {
-    logger(INFO, rowColor) << "payment ID: " << paymentIdStr;
-  }
+    Crypto::Hash paymentId;
+    std::string paymentIdStr = (getPaymentIdFromTxExtra(extraVec, paymentId) && paymentId != NULL_HASH
+                                ? Common::podToHex(paymentId) : "");
 
-  if (txInfo.totalAmount < 0) {
-    if (txInfo.transferCount > 0) {
-      logger(INFO, rowColor) << "transfers:";
-      for (TransferId id = txInfo.firstTransferId; id < txInfo.firstTransferId + txInfo.transferCount; ++id) {
-        WalletLegacyTransfer tr;
-        wallet.getTransfer(id, tr);
-        logger(INFO, rowColor) << tr.address << "  " << std::setw(TOTAL_AMOUNT_MAX_WIDTH) << currency.formatAmount(tr.amount);
+    char timeString[TIMESTAMP_MAX_WIDTH + 1];
+    time_t timestamp = static_cast<time_t>(txInfo.timestamp);
+    if (std::strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S", std::gmtime(&timestamp)) == 0) {
+      throw std::runtime_error("time buffer is too small");
+    }
+
+    std::string rowColor = txInfo.totalAmount < 0 ? MAGENTA : GREEN;
+    logger(INFO, rowColor)
+        << std::setw(TIMESTAMP_MAX_WIDTH) << timeString
+        << "  " << std::setw(HASH_MAX_WIDTH) << Common::podToHex(txInfo.hash)
+        << "  " << std::setw(TOTAL_AMOUNT_MAX_WIDTH) << currency.formatAmount(txInfo.totalAmount)
+        << "  " << std::setw(FEE_MAX_WIDTH) << currency.formatAmount(txInfo.fee)
+        << "  " << std::setw(BLOCK_MAX_WIDTH) << txInfo.blockHeight
+        << "  " << std::setw(UNLOCK_TIME_MAX_WIDTH) << txInfo.unlockTime;
+
+    if (!paymentIdStr.empty()) {
+      logger(INFO, rowColor) << "payment ID: " << paymentIdStr;
+    }
+
+    if (txInfo.totalAmount < 0) {
+      if (txInfo.transferCount > 0) {
+        logger(INFO, rowColor) << "transfers:";
+        for (TransferId id = txInfo.firstTransferId; id < txInfo.firstTransferId + txInfo.transferCount; ++id) {
+          WalletLegacyTransfer tr;
+          wallet.getTransfer(id, tr);
+          logger(INFO, rowColor) << tr.address << "  " << std::setw(TOTAL_AMOUNT_MAX_WIDTH)
+                                 << currency.formatAmount(tr.amount);
+        }
       }
     }
+
+    logger(INFO, rowColor) << " "; //just to make logger print one endline
   }
 
-  logger(INFO, rowColor) << " "; //just to make logger print one endline
-}
-
-std::string prepareWalletAddressFilename(const std::string& walletBaseName) {
-  return walletBaseName + ".address";
-}
-
-bool writeAddressFile(const std::string& addressFilename, const std::string& address) {
-  std::ofstream addressFile(addressFilename, std::ios::out | std::ios::trunc | std::ios::binary);
-  if (!addressFile.good()) {
-    return false;
+  std::string prepareWalletAddressFilename(const std::string &walletBaseName) {
+    return walletBaseName + ".address";
   }
 
-  addressFile << address;
+  bool writeAddressFile(const std::string &addressFilename, const std::string &address) {
+    std::ofstream addressFile(addressFilename, std::ios::out | std::ios::trunc | std::ios::binary);
+    if (!addressFile.good()) {
+      return false;
+    }
 
-  return true;
-}
+    addressFile << address;
+
+    return true;
+  }
 
 }
 
@@ -434,7 +484,7 @@ std::string simple_wallet::get_commands_str() {
   return ss.str();
 }
 
-bool simple_wallet::help(const std::vector<std::string> &args/* = std::vector<std::string>()*/) {
+bool simple_wallet::help(const std::vector<std::string> &args) {
   success_msg_writer() << get_commands_str();
   return true;
 }
@@ -449,7 +499,7 @@ simple_wallet::simple_wallet(System::Dispatcher& dispatcher, const CryptoNote::C
   m_daemon_port(0), 
   m_currency(currency), 
   logManager(log),
-  logger(log, "simplewallet"),
+  logger(log, "discoin_wallet"),
   m_refresh_progress_reporter(*this), 
   m_initResultPromise(nullptr),
   m_walletSynchronized(false) {
@@ -467,11 +517,13 @@ simple_wallet::simple_wallet(System::Dispatcher& dispatcher, const CryptoNote::C
     "<mixin_count> is the number of transactions yours is indistinguishable from (from 0 to maximum available)");
   m_consoleHandler.setHandler("set_log", boost::bind(&simple_wallet::set_log, this, _1), "set_log <level> - Change current log level, <level> is a number 0-4");
   m_consoleHandler.setHandler("address", boost::bind(&simple_wallet::print_address, this, _1), "Show current wallet public address");
+  m_consoleHandler.setHandler("keys", boost::bind(&simple_wallet::print_keys, this, _1), "Show current wallet view and spend secret keys");
   m_consoleHandler.setHandler("save", boost::bind(&simple_wallet::save, this, _1), "Save wallet synchronized data");
   m_consoleHandler.setHandler("reset", boost::bind(&simple_wallet::reset, this, _1), "Discard cache data and start synchronizing from the start");
   m_consoleHandler.setHandler("help", boost::bind(&simple_wallet::help, this, _1), "Show this help");
   m_consoleHandler.setHandler("exit", boost::bind(&simple_wallet::exit, this, _1), "Close wallet");
 }
+
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::set_log(const std::vector<std::string> &args) {
   if (args.size() != 1) {
@@ -484,7 +536,7 @@ bool simple_wallet::set_log(const std::vector<std::string> &args) {
     fail_msg_writer() << "wrong number format, use: set_log <log_level_number_0-4>";
     return true;
   }
- 
+
   if (l > Logging::TRACE) {
     fail_msg_writer() << "wrong number range, use: set_log <log_level_number_0-4>";
     return true;
@@ -493,8 +545,9 @@ bool simple_wallet::set_log(const std::vector<std::string> &args) {
   logManager.setMaxLevel(static_cast<Logging::Level>(l));
   return true;
 }
+
 //----------------------------------------------------------------------------------------------------
-bool simple_wallet::init(const boost::program_options::variables_map& vm) {
+bool simple_wallet::init(const boost::program_options::variables_map &vm) {
   handle_command_line(vm);
 
   if (!m_daemon_address.empty() && (!m_daemon_host.empty() || 0 != m_daemon_port)) {
@@ -502,15 +555,23 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm) {
     return false;
   }
 
-  if (m_generate_new.empty() && m_wallet_file_arg.empty()) {
-    std::cout << "Nor 'generate-new-wallet' neither 'wallet-file' argument was specified.\nWhat do you want to do?\n[O]pen existing wallet, [G]enerate new wallet file or [E]xit.\n";
+  if (m_generate_new.empty()
+      && m_wallet_file_arg.empty()
+      && (m_import_view_secret_key_arg.empty()
+          || m_import_spend_secret_key_arg.empty())) {
+    std::cout << "What do you want to do?\n";
+    std::cout << "O - open an existing wallet\n";
+    std::cout << "G - generate a new wallet\n";
+    std::cout << "I - import a wallet from keys\n";
+    std::cout << "E - exit\n";
+
     char c;
     do {
       std::string answer;
       std::getline(std::cin, answer);
       c = answer[0];
-      if (!(c == 'O' || c == 'G' || c == 'E' || c == 'o' || c == 'g' || c == 'e')) {
-        std::cout << "Unknown command: " << c <<std::endl;
+      if (!(c == 'O' || c == 'G' || c == 'I' || c == 'E' || c == 'o' || c == 'g' || c == 'i' || c == 'e')) {
+        std::cout << "Unknown command: " << c << std::endl;
       } else {
         break;
       }
@@ -520,31 +581,65 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm) {
       return false;
     }
 
-    std::cout << "Specify wallet file name (e.g., wallet.bin).\n";
+    std::cout << "Specify wallet file name (e.g., discoinwallet).\n";
     std::string userInput;
+    bool userInputValid = true;
     do {
       std::cout << "Wallet file name: ";
       std::getline(std::cin, userInput);
       boost::algorithm::trim(userInput);
-    } while (userInput.empty());
+
+      if (c != 'o' && c != 'O') {
+        std::string ignoredString;
+        std::string walletFileName;
+
+        WalletHelper::prepareFileNames(userInput, ignoredString, walletFileName);
+        boost::system::error_code ignore;
+
+        if (boost::filesystem::exists(walletFileName, ignore)) {
+          std::cout << walletFileName << " already exists! Try a different name." << std::endl;
+          userInputValid = false;
+        } else {
+          userInputValid = true;
+        }
+      }
+    } while (!userInputValid);
 
     if (c == 'g' || c == 'G') {
       m_generate_new = userInput;
+    } else if (c == 'i' || c == 'I') {
+      m_import_from_keys = userInput;
     } else {
       m_wallet_file_arg = userInput;
     }
   }
 
-  if (!m_generate_new.empty() && !m_wallet_file_arg.empty()) {
-    fail_msg_writer() << "you can't specify 'generate-new-wallet' and 'wallet-file' arguments simultaneously";
+  if (!m_generate_new.empty()
+      && (!m_wallet_file_arg.empty()
+          || !m_import_spend_secret_key_arg.empty()
+          || !m_import_view_secret_key_arg.empty())) {
+    fail_msg_writer() << "you can't specify 'generate-new-wallet' and 'wallet-file' or 'import-*-secret-keys' arguments simultaneously";
     return false;
   }
 
   std::string walletFileName;
-  if (!m_generate_new.empty()) {
+  if (!m_generate_new.empty()
+      || (!m_import_view_secret_key_arg.empty()
+          && !m_import_spend_secret_key_arg.empty())
+      || !m_import_from_keys.empty()) {
     std::string ignoredString;
-    WalletHelper::prepareFileNames(m_generate_new, ignoredString, walletFileName);
+
+    if (!m_generate_new.empty()) {
+      WalletHelper::prepareFileNames(m_generate_new, ignoredString, walletFileName);
+    } else if (!m_import_view_secret_key_arg.empty()
+               && !m_import_spend_secret_key_arg.empty()) {
+      WalletHelper::prepareFileNames(m_wallet_file_arg, ignoredString, walletFileName);
+    } else if (!m_import_from_keys.empty()) {
+      WalletHelper::prepareFileNames(m_import_from_keys, ignoredString, walletFileName);
+    }
+
     boost::system::error_code ignore;
+
     if (boost::filesystem::exists(walletFileName, ignore)) {
       fail_msg_writer() << walletFileName << " already exists";
       return false;
@@ -555,7 +650,7 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm) {
     m_daemon_host = "localhost";
   if (!m_daemon_port)
     m_daemon_port = RPC_DEFAULT_PORT;
-  
+
   if (!m_daemon_address.empty()) {
     if (!parseUrlAddress(m_daemon_address, m_daemon_host, m_daemon_port)) {
       fail_msg_writer() << "failed to parse daemon address: " << m_daemon_address;
@@ -568,7 +663,7 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm) {
   Tools::PasswordContainer pwd_container;
   if (command_line::has_arg(vm, arg_password)) {
     pwd_container.password(command_line::get_arg(vm, arg_password));
-  } else if (!pwd_container.read_password()) {
+  } else if (!pwd_container.read_password(!m_generate_new.empty() || !m_import_from_keys.empty())) {
     fail_msg_writer() << "failed to read wallet password";
     return false;
   }
@@ -577,9 +672,9 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm) {
 
   std::promise<std::error_code> errorPromise;
   std::future<std::error_code> f_error = errorPromise.get_future();
-  auto callback = [&errorPromise](std::error_code e) {errorPromise.set_value(e); };
+  auto callback = [&errorPromise](std::error_code e) { errorPromise.set_value(e); };
 
-  m_node->addObserver(static_cast<INodeRpcProxyObserver*>(this));
+  m_node->addObserver(static_cast<INodeRpcProxyObserver *>(this));
   m_node->init(callback);
   auto error = f_error.get();
   if (error) {
@@ -589,7 +684,9 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm) {
 
   if (!m_generate_new.empty()) {
     std::string walletAddressFile = prepareWalletAddressFilename(m_generate_new);
+
     boost::system::error_code ignore;
+
     if (boost::filesystem::exists(walletAddressFile, ignore)) {
       logger(ERROR, BRIGHT_RED) << "Address file already exists: " + walletAddressFile;
       return false;
@@ -603,70 +700,133 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm) {
     if (!writeAddressFile(walletAddressFile, m_wallet->getAddress())) {
       logger(WARNING, BRIGHT_RED) << "Couldn't write wallet address file: " + walletAddressFile;
     }
+  } else if (!m_import_from_keys.empty()
+             || (!m_import_view_secret_key_arg.empty() && !m_import_spend_secret_key_arg.empty())) {
+    std::string walletAddressFile = prepareWalletAddressFilename(m_import_from_keys);
+
+    boost::system::error_code ignore;
+
+    if (boost::filesystem::exists(walletAddressFile, ignore)) {
+      logger(ERROR, BRIGHT_RED) << "Address file already exists: " + walletAddressFile;
+      return false;
+    }
+
+    std::string privateSpendKeyString;
+    std::string privateViewKeyString;
+
+    if (!m_import_spend_secret_key_arg.empty() && !m_import_view_secret_key_arg.empty()) {
+      privateSpendKeyString = m_import_spend_secret_key_arg;
+      privateViewKeyString = m_import_view_secret_key_arg;
+    } else {
+      do {
+        std::cout << "Spend secret Key: ";
+        std::getline(std::cin, privateSpendKeyString);
+        boost::algorithm::trim(privateSpendKeyString);
+      } while (privateSpendKeyString.empty());
+
+      do {
+        std::cout << "View secret key: ";
+        std::getline(std::cin, privateViewKeyString);
+        boost::algorithm::trim(privateViewKeyString);
+      } while (privateViewKeyString.empty());
+    }
+
+    Crypto::Hash privateSpendKeyHash;
+    Crypto::Hash privateViewKeyHash;
+    size_t size;
+
+    if (!Common::fromHex(privateSpendKeyString, &privateSpendKeyHash, sizeof(privateSpendKeyHash), size)
+        || size != sizeof(privateSpendKeyHash)) {
+      return false;
+    }
+
+    if (!Common::fromHex(privateViewKeyString, &privateViewKeyHash, sizeof(privateViewKeyHash), size)
+        || size != sizeof(privateViewKeyHash)) {
+      return false;
+    }
+
+    Crypto::SecretKey privateSpendKey = *(struct Crypto::SecretKey *) &privateSpendKeyHash;
+    Crypto::SecretKey privateViewKey = *(struct Crypto::SecretKey *) &privateViewKeyHash;
+
+    if (!new_wallet(privateSpendKey, privateViewKey, walletFileName, pwd_container.password())) {
+      logger(ERROR, BRIGHT_RED) << "account creation failed";
+      return false;
+    }
+
+    if (!writeAddressFile(walletAddressFile, m_wallet->getAddress())) {
+      logger(WARNING, BRIGHT_RED) << "Couldn't write wallet address file: " + walletAddressFile;
+    }
   } else {
     m_wallet.reset(new WalletLegacy(m_currency, *m_node));
 
     try {
       m_wallet_file = tryToOpenWalletOrLoadKeysOrThrow(logger, m_wallet, m_wallet_file_arg, pwd_container.password());
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
       fail_msg_writer() << "failed to load wallet: " << e.what();
       return false;
     }
 
     m_wallet->addObserver(this);
-    m_node->addObserver(static_cast<INodeObserver*>(this));
+    m_node->addObserver(static_cast<INodeObserver *>(this));
 
     logger(INFO, BRIGHT_WHITE) << "Opened wallet: " << m_wallet->getAddress();
 
     success_msg_writer() <<
-      "**********************************************************************\n" <<
-      "Use \"help\" command to see the list of available commands.\n" <<
-      "**********************************************************************";
+                         "**********************************************************************\n" <<
+                         "Use \"help\" command to see the list of available commands.\n" <<
+                         "**********************************************************************";
   }
 
   return true;
 }
+
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::deinit() {
   m_wallet->removeObserver(this);
-  m_node->removeObserver(static_cast<INodeObserver*>(this));
-  m_node->removeObserver(static_cast<INodeRpcProxyObserver*>(this));
+  m_node->removeObserver(static_cast<INodeObserver *>(this));
+  m_node->removeObserver(static_cast<INodeRpcProxyObserver *>(this));
 
   if (!m_wallet.get())
     return true;
 
   return close_wallet();
 }
+
 //----------------------------------------------------------------------------------------------------
-void simple_wallet::handle_command_line(const boost::program_options::variables_map& vm) {
+void simple_wallet::handle_command_line(const boost::program_options::variables_map &vm) {
   m_wallet_file_arg = command_line::get_arg(vm, arg_wallet_file);
   m_generate_new = command_line::get_arg(vm, arg_generate_new_wallet);
+  m_import_view_secret_key_arg = command_line::get_arg(vm, arg_import_view_secret_key);
+  m_import_spend_secret_key_arg = command_line::get_arg(vm, arg_import_spend_secret_key);
   m_daemon_address = command_line::get_arg(vm, arg_daemon_address);
   m_daemon_host = command_line::get_arg(vm, arg_daemon_host);
   m_daemon_port = command_line::get_arg(vm, arg_daemon_port);
 }
+
 //----------------------------------------------------------------------------------------------------
-bool simple_wallet::new_wallet(const std::string &wallet_file, const std::string& password) {
-  m_wallet_file = wallet_file;
+bool simple_wallet::new_wallet(const std::string &walletFile, const std::string &password) {
+  m_wallet_file = walletFile;
 
   m_wallet.reset(new WalletLegacy(m_currency, *m_node.get()));
-  m_node->addObserver(static_cast<INodeObserver*>(this));
+  m_node->addObserver(static_cast<INodeObserver *>(this));
   m_wallet->addObserver(this);
+
   try {
     m_initResultPromise.reset(new std::promise<std::error_code>());
     std::future<std::error_code> f_initError = m_initResultPromise->get_future();
     m_wallet->initAndGenerate(password);
     auto initError = f_initError.get();
     m_initResultPromise.reset(nullptr);
+
     if (initError) {
-      fail_msg_writer() << "failed to generate new wallet: " << initError.message();
+      fail_msg_writer() << "Failed to generate new wallet: " << initError.message();
       return false;
     }
 
     try {
       CryptoNote::WalletHelper::storeWallet(*m_wallet, m_wallet_file);
-    } catch (std::exception& e) {
-      fail_msg_writer() << "failed to save new wallet: " << e.what();
+    } catch (std::exception &e) {
+      fail_msg_writer() << "Failed to save new wallet: " << e.what();
       throw;
     }
 
@@ -674,30 +834,86 @@ bool simple_wallet::new_wallet(const std::string &wallet_file, const std::string
     m_wallet->getAccountKeys(keys);
 
     logger(INFO, BRIGHT_WHITE) <<
-      "Generated new wallet: " << m_wallet->getAddress() << std::endl <<
-      "view key: " << Common::podToHex(keys.viewSecretKey);
+                               "Generated new wallet: " << m_wallet->getAddress() << std::endl <<
+                               "View secret key: " << Common::podToHex(keys.viewSecretKey) << std::endl <<
+                               "Spend secret key: " << Common::podToHex(keys.spendSecretKey);
   }
-  catch (const std::exception& e) {
-    fail_msg_writer() << "failed to generate new wallet: " << e.what();
+  catch (const std::exception &e) {
+    fail_msg_writer() << "Failed to generate new wallet: " << e.what();
     return false;
   }
 
   success_msg_writer() <<
-    "**********************************************************************\n" <<
-    "Your wallet has been generated.\n" <<
-    "Use \"help\" command to see the list of available commands.\n" <<
-    "Always use \"exit\" command when closing simplewallet to save\n" <<
-    "current session's state. Otherwise, you will possibly need to synchronize \n" <<
-    "your wallet again. Your wallet key is NOT under risk anyway.\n" <<
-    "**********************************************************************";
+                       "**********************************************************************\n" <<
+                       "Your wallet has been generated. Keep preciously your view and spend secret keys above.\n" <<
+                       "Use \"help\" command to see the list of available commands.\n" <<
+                       "Always use \"exit\" command when closing discoin_wallet to save\n" <<
+                       "current session's state. Otherwise, you will possibly need to synchronize \n" <<
+                       "your wallet again. Your wallet key is NOT under risk anyway.\n" <<
+                       "**********************************************************************";
   return true;
 }
+
+bool simple_wallet::new_wallet(Crypto::SecretKey &secretKey, Crypto::SecretKey &viewKey, const std::string &walletFile,
+                               const std::string &password) {
+  m_wallet_file = walletFile;
+
+  m_wallet.reset(new WalletLegacy(m_currency, *m_node.get()));
+  m_node->addObserver(static_cast<INodeObserver *>(this));
+  m_wallet->addObserver(this);
+
+  try {
+    m_initResultPromise.reset(new std::promise<std::error_code>());
+    std::future<std::error_code> f_initError = m_initResultPromise->get_future();
+
+    AccountKeys walletKeys;
+    walletKeys.spendSecretKey = secretKey;
+    walletKeys.viewSecretKey = viewKey;
+    Crypto::secret_key_to_public_key(walletKeys.spendSecretKey, walletKeys.address.spendPublicKey);
+    Crypto::secret_key_to_public_key(walletKeys.viewSecretKey, walletKeys.address.viewPublicKey);
+
+    m_wallet->initWithKeys(walletKeys, password);
+    auto initError = f_initError.get();
+    m_initResultPromise.reset(nullptr);
+
+    if (initError) {
+      fail_msg_writer() << "Failed to generate new wallet: " << initError.message();
+      return false;
+    }
+
+    try {
+      CryptoNote::WalletHelper::storeWallet(*m_wallet, m_wallet_file);
+    } catch (std::exception &e) {
+      fail_msg_writer() << "Failed to save new wallet: " << e.what();
+      throw;
+    }
+
+    AccountKeys keys;
+    m_wallet->getAccountKeys(keys);
+
+    logger(INFO, BRIGHT_WHITE) << "Imported wallet: " << m_wallet->getAddress() << std::endl;
+  }
+  catch (const std::exception &e) {
+    fail_msg_writer() << "Failed to import wallet: " << e.what();
+    return false;
+  }
+
+  success_msg_writer() <<
+                       "**********************************************************************\n" <<
+                       "Your wallet has been imported.\n" <<
+                       "Use \"help\" command to see the list of available commands.\n" <<
+                       "Always use \"exit\" command when closing discoin_wallet to save\n" <<
+                       "current session's state. Otherwise, you will possibly need to synchronize \n" <<
+                       "your wallet again. Your wallet key is NOT under risk anyway.\n" <<
+                       "**********************************************************************";
+  return true;
+}
+
 //----------------------------------------------------------------------------------------------------
-bool simple_wallet::close_wallet()
-{
+bool simple_wallet::close_wallet() {
   try {
     CryptoNote::WalletHelper::storeWallet(*m_wallet, m_wallet_file);
-  } catch (const std::exception& e) {
+  } catch (const std::exception &e) {
     fail_msg_writer() << e.what();
     return false;
   }
@@ -709,12 +925,11 @@ bool simple_wallet::close_wallet()
 }
 
 //----------------------------------------------------------------------------------------------------
-bool simple_wallet::save(const std::vector<std::string> &args)
-{
+bool simple_wallet::save(const std::vector<std::string> &args) {
   try {
     CryptoNote::WalletHelper::storeWallet(*m_wallet, m_wallet_file);
     success_msg_writer() << "Wallet data saved";
-  } catch (const std::exception& e) {
+  } catch (const std::exception &e) {
     fail_msg_writer() << e.what();
   }
 
@@ -740,7 +955,7 @@ bool simple_wallet::reset(const std::vector<std::string> &args) {
   return true;
 }
 
-bool simple_wallet::start_mining(const std::vector<std::string>& args) {
+bool simple_wallet::start_mining(const std::vector<std::string> &args) {
   COMMAND_RPC_START_MINING::request req;
   req.miner_address = m_wallet->getAddress();
 
@@ -759,7 +974,7 @@ bool simple_wallet::start_mining(const std::vector<std::string>& args) {
 
   if (!ok) {
     fail_msg_writer() << "invalid arguments. Please use start_mining [<number_of_threads>], " <<
-      "<number_of_threads> should be from 1 to " << max_mining_threads_count;
+                      "<number_of_threads> should be from 1 to " << max_mining_threads_count;
     return true;
   }
 
@@ -777,17 +992,17 @@ bool simple_wallet::start_mining(const std::vector<std::string>& args) {
     else
       fail_msg_writer() << "mining has NOT been started: " << err;
 
-  } catch (const ConnectException&) {
+  } catch (const ConnectException &) {
     printConnectionError();
-  } catch (const std::exception& e) {
+  } catch (const std::exception &e) {
     fail_msg_writer() << "Failed to invoke rpc method: " << e.what();
   }
 
   return true;
 }
+
 //----------------------------------------------------------------------------------------------------
-bool simple_wallet::stop_mining(const std::vector<std::string>& args)
-{
+bool simple_wallet::stop_mining(const std::vector<std::string> &args) {
   COMMAND_RPC_STOP_MINING::request req;
   COMMAND_RPC_STOP_MINING::response res;
 
@@ -800,20 +1015,22 @@ bool simple_wallet::stop_mining(const std::vector<std::string>& args)
       success_msg_writer() << "Mining stopped in daemon";
     else
       fail_msg_writer() << "mining has NOT been stopped: " << err;
-  } catch (const ConnectException&) {
+  } catch (const ConnectException &) {
     printConnectionError();
-  } catch (const std::exception& e) {
+  } catch (const std::exception &e) {
     fail_msg_writer() << "Failed to invoke rpc method: " << e.what();
   }
 
   return true;
 }
+
 //----------------------------------------------------------------------------------------------------
 void simple_wallet::initCompleted(std::error_code result) {
   if (m_initResultPromise.get() != nullptr) {
     m_initResultPromise->set_value(result);
   }
 }
+
 //----------------------------------------------------------------------------------------------------
 void simple_wallet::connectionStatusUpdated(bool connected) {
   if (connected) {
@@ -822,11 +1039,12 @@ void simple_wallet::connectionStatusUpdated(bool connected) {
     printConnectionError();
   }
 }
+
 //----------------------------------------------------------------------------------------------------
-void simple_wallet::externalTransactionCreated(CryptoNote::TransactionId transactionId)  {
+void simple_wallet::externalTransactionCreated(CryptoNote::TransactionId transactionId) {
   WalletLegacyTransaction txInfo;
   m_wallet->getTransaction(transactionId, txInfo);
-  
+
   std::stringstream logPrefix;
   if (txInfo.blockHeight == WALLET_LEGACY_UNCONFIRMED_TRANSACTION_HEIGHT) {
     logPrefix << "Unconfirmed";
@@ -836,12 +1054,12 @@ void simple_wallet::externalTransactionCreated(CryptoNote::TransactionId transac
 
   if (txInfo.totalAmount >= 0) {
     logger(INFO, GREEN) <<
-      logPrefix.str() << " transaction " << Common::podToHex(txInfo.hash) <<
-      ", received " << m_currency.formatAmount(txInfo.totalAmount);
+                        logPrefix.str() << " transaction " << Common::podToHex(txInfo.hash) <<
+                        ", received " << m_currency.formatAmount(txInfo.totalAmount);
   } else {
     logger(INFO, MAGENTA) <<
-      logPrefix.str() << " transaction " << Common::podToHex(txInfo.hash) <<
-      ", spent " << m_currency.formatAmount(static_cast<uint64_t>(-txInfo.totalAmount));
+                          logPrefix.str() << " transaction " << Common::podToHex(txInfo.hash) <<
+                          ", spent " << m_currency.formatAmount(static_cast<uint64_t>(-txInfo.totalAmount));
   }
 
   if (txInfo.blockHeight == WALLET_LEGACY_UNCONFIRMED_TRANSACTION_HEIGHT) {
@@ -850,6 +1068,7 @@ void simple_wallet::externalTransactionCreated(CryptoNote::TransactionId transac
     m_refresh_progress_reporter.update(txInfo.blockHeight, true);
   }
 }
+
 //----------------------------------------------------------------------------------------------------
 void simple_wallet::synchronizationCompleted(std::error_code result) {
   std::unique_lock<std::mutex> lock(m_walletSynchronizedMutex);
@@ -864,14 +1083,15 @@ void simple_wallet::synchronizationProgressUpdated(uint32_t current, uint32_t to
   }
 }
 
-bool simple_wallet::show_balance(const std::vector<std::string>& args/* = std::vector<std::string>()*/) {
+bool simple_wallet::show_balance(const std::vector<std::string> &args/* = std::vector<std::string>()*/) {
   success_msg_writer() << "available balance: " << m_currency.formatAmount(m_wallet->actualBalance()) <<
-    ", locked amount: " << m_currency.formatAmount(m_wallet->pendingBalance());
+                       ", locked amount: " << m_currency.formatAmount(m_wallet->pendingBalance());
 
   return true;
 }
+
 //----------------------------------------------------------------------------------------------------
-bool simple_wallet::show_incoming_transfers(const std::vector<std::string>& args) {
+bool simple_wallet::show_incoming_transfers(const std::vector<std::string> &args) {
   bool hasTransfers = false;
   size_t transactionsCount = m_wallet->getTransactionCount();
   for (size_t trantransactionNumber = 0; trantransactionNumber < transactionsCount; ++trantransactionNumber) {
@@ -881,21 +1101,23 @@ bool simple_wallet::show_incoming_transfers(const std::vector<std::string>& args
     hasTransfers = true;
     logger(INFO) << "        amount       \t                              tx id";
     logger(INFO, GREEN) <<  // spent - magenta
-      std::setw(21) << m_currency.formatAmount(txInfo.totalAmount) << '\t' << Common::podToHex(txInfo.hash);
+                        std::setw(21) << m_currency.formatAmount(txInfo.totalAmount) << '\t'
+                        << Common::podToHex(txInfo.hash);
   }
 
   if (!hasTransfers) success_msg_writer() << "No incoming transfers";
   return true;
 }
 
-bool simple_wallet::listTransfers(const std::vector<std::string>& args) {
+bool simple_wallet::listTransfers(const std::vector<std::string> &args) {
   bool haveTransfers = false;
 
   size_t transactionsCount = m_wallet->getTransactionCount();
   for (size_t trantransactionNumber = 0; trantransactionNumber < transactionsCount; ++trantransactionNumber) {
     WalletLegacyTransaction txInfo;
     m_wallet->getTransaction(trantransactionNumber, txInfo);
-    if (txInfo.state != WalletLegacyTransactionState::Active || txInfo.blockHeight == WALLET_LEGACY_UNCONFIRMED_TRANSACTION_HEIGHT) {
+    if (txInfo.state != WalletLegacyTransactionState::Active ||
+        txInfo.blockHeight == WALLET_LEGACY_UNCONFIRMED_TRANSACTION_HEIGHT) {
       continue;
     }
 
@@ -921,11 +1143,11 @@ bool simple_wallet::show_payments(const std::vector<std::string> &args) {
   }
 
   logger(INFO) << "                            payment                             \t" <<
-    "                          transaction                           \t" <<
-    "  height\t       amount        ";
+               "                          transaction                           \t" <<
+               "  height\t       amount        ";
 
   bool payments_found = false;
-  for (const std::string& arg: args) {
+  for (const std::string &arg: args) {
     Crypto::Hash expectedPaymentId;
     if (CryptoNote::parsePaymentId(arg, expectedPaymentId)) {
       size_t transactionsCount = m_wallet->getTransactionCount();
@@ -941,10 +1163,10 @@ bool simple_wallet::show_payments(const std::vector<std::string> &args) {
         if (CryptoNote::getPaymentIdFromTxExtra(extraVec, paymentId) && paymentId == expectedPaymentId) {
           payments_found = true;
           success_msg_writer(true) <<
-            paymentId << "\t\t" <<
-            Common::podToHex(txInfo.hash) <<
-            std::setw(8) << txInfo.blockHeight << '\t' <<
-            std::setw(21) << m_currency.formatAmount(txInfo.totalAmount);// << '\t' <<
+                                   paymentId << "\t\t" <<
+                                   Common::podToHex(txInfo.hash) <<
+                                   std::setw(8) << txInfo.blockHeight << '\t' <<
+                                   std::setw(21) << m_currency.formatAmount(txInfo.totalAmount);// << '\t' <<
         }
       }
 
@@ -959,8 +1181,9 @@ bool simple_wallet::show_payments(const std::vector<std::string> &args) {
 
   return true;
 }
+
 //----------------------------------------------------------------------------------------------------
-bool simple_wallet::show_blockchain_height(const std::vector<std::string>& args) {
+bool simple_wallet::show_blockchain_height(const std::vector<std::string> &args) {
   try {
     uint64_t bc_height = m_node->getLastLocalBlockHeight();
     success_msg_writer() << bc_height;
@@ -970,6 +1193,7 @@ bool simple_wallet::show_blockchain_height(const std::vector<std::string>& args)
 
   return true;
 }
+
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::transfer(const std::vector<std::string> &args) {
   try {
@@ -1004,13 +1228,13 @@ bool simple_wallet::transfer(const std::vector<std::string> &args) {
 
     try {
       CryptoNote::WalletHelper::storeWallet(*m_wallet, m_wallet_file);
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
       fail_msg_writer() << e.what();
       return true;
     }
-  } catch (const std::system_error& e) {
+  } catch (const std::system_error &e) {
     fail_msg_writer() << e.what();
-  } catch (const std::exception& e) {
+  } catch (const std::exception &e) {
     fail_msg_writer() << e.what();
   } catch (...) {
     fail_msg_writer() << "unknown error";
@@ -1018,6 +1242,7 @@ bool simple_wallet::transfer(const std::vector<std::string> &args) {
 
   return true;
 }
+
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::run() {
   {
@@ -1033,15 +1258,27 @@ bool simple_wallet::run() {
   m_consoleHandler.start(false, "[wallet " + addr_start + "]: ", Common::Console::Color::BrightYellow);
   return true;
 }
+
 //----------------------------------------------------------------------------------------------------
 void simple_wallet::stop() {
   m_consoleHandler.requestStop();
 }
+
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::print_address(const std::vector<std::string> &args/* = std::vector<std::string>()*/) {
   success_msg_writer() << m_wallet->getAddress();
   return true;
 }
+
+//----------------------------------------------------------------------------------------------------
+bool simple_wallet::print_keys(const std::vector<std::string> &args) {
+  AccountKeys keys{};
+  m_wallet->getAccountKeys(keys);
+  success_msg_writer() << "View secret key: " << Common::podToHex(keys.viewSecretKey) << std::endl;
+  success_msg_writer() << "Spend secret key: " << Common::podToHex(keys.spendSecretKey);
+  return true;
+}
+
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::process_command(const std::vector<std::string> &args) {
   return m_consoleHandler.runCommand(args);
@@ -1052,7 +1289,7 @@ void simple_wallet::printConnectionError() const {
 }
 
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
 #ifdef WIN32
   _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
@@ -1064,6 +1301,8 @@ int main(int argc, char* argv[]) {
   po::options_description desc_params("Wallet options");
   command_line::add_arg(desc_params, arg_wallet_file);
   command_line::add_arg(desc_params, arg_generate_new_wallet);
+  command_line::add_arg(desc_params, arg_import_view_secret_key);
+  command_line::add_arg(desc_params, arg_import_spend_secret_key);
   command_line::add_arg(desc_params, arg_password);
   command_line::add_arg(desc_params, arg_daemon_address);
   command_line::add_arg(desc_params, arg_daemon_host);
@@ -1080,7 +1319,7 @@ int main(int argc, char* argv[]) {
   desc_all.add(desc_general).add(desc_params);
 
   Logging::LoggerManager logManager;
-  Logging::LoggerRef logger(logManager, "simplewallet");
+  Logging::LoggerRef logger(logManager, "discoin_wallet");
   System::Dispatcher dispatcher;
 
   po::variables_map vm;
@@ -1092,12 +1331,13 @@ int main(int argc, char* argv[]) {
       CryptoNote::Currency tmp_currency = CryptoNote::CurrencyBuilder(logManager).currency();
       CryptoNote::simple_wallet tmp_wallet(dispatcher, tmp_currency, logManager);
 
-      std::cout << CRYPTONOTE_NAME << " wallet v" << PROJECT_VERSION_LONG << std::endl;
-      std::cout << "Usage: simplewallet [--wallet-file=<file>|--generate-new-wallet=<file>] [--daemon-address=<host>:<port>] [<COMMAND>]";
+      std::cout << CRYPTONOTE_NAME << " wallet v" << PROJECT_VERSION << std::endl;
+      std::cout
+          << "Usage: discoin_wallet [--wallet-file=<file>|--generate-new-wallet=<file>] [--daemon-address=<host>:<port>] [<COMMAND>]";
       std::cout << desc_all << '\n' << tmp_wallet.get_commands_str();
       return false;
-    } else if (command_line::get_arg(vm, command_line::arg_version))  {
-      std::cout << CRYPTONOTE_NAME << " wallet v" << PROJECT_VERSION_LONG;
+    } else if (command_line::get_arg(vm, command_line::arg_version)) {
+      std::cout << CRYPTONOTE_NAME << " wallet v" << PROJECT_VERSION;
       return false;
     }
 
@@ -1119,10 +1359,10 @@ int main(int argc, char* argv[]) {
 
   logManager.configure(buildLoggerConfiguration(logLevel, Common::ReplaceExtenstion(argv[0], ".log")));
 
-  logger(INFO, BRIGHT_WHITE) << CRYPTONOTE_NAME << " wallet v" << PROJECT_VERSION_LONG;
+  logger(INFO, BRIGHT_WHITE) << CRYPTONOTE_NAME << " wallet v" << PROJECT_VERSION;
 
   CryptoNote::Currency currency = CryptoNote::CurrencyBuilder(logManager).
-    testnet(command_line::get_arg(vm, arg_testnet)).currency();
+      testnet(command_line::get_arg(vm, arg_testnet)).currency();
 
   if (command_line::has_arg(vm, Tools::wallet_rpc_server::arg_rpc_bind_port)) {
     //runs wallet with rpc interface
@@ -1162,7 +1402,7 @@ int main(int argc, char* argv[]) {
 
     std::promise<std::error_code> errorPromise;
     std::future<std::error_code> error = errorPromise.get_future();
-    auto callback = [&errorPromise](std::error_code e) {errorPromise.set_value(e); };
+    auto callback = [&errorPromise](std::error_code e) { errorPromise.set_value(e); };
     node->init(callback);
     if (error.get()) {
       logger(ERROR, BRIGHT_RED) << ("failed to init NodeRPCProxy");
@@ -1172,14 +1412,14 @@ int main(int argc, char* argv[]) {
     std::unique_ptr<IWalletLegacy> wallet(new WalletLegacy(currency, *node.get()));
 
     std::string walletFileName;
-    try  {
+    try {
       walletFileName = ::tryToOpenWalletOrLoadKeysOrThrow(logger, wallet, wallet_file, wallet_password);
 
       logger(INFO) << "available balance: " << currency.formatAmount(wallet->actualBalance()) <<
-      ", locked amount: " << currency.formatAmount(wallet->pendingBalance());
+                   ", locked amount: " << currency.formatAmount(wallet->pendingBalance());
 
       logger(INFO, BRIGHT_GREEN) << "Loaded ok";
-    } catch (const std::exception& e)  {
+    } catch (const std::exception &e) {
       logger(ERROR, BRIGHT_RED) << "Wallet initialize failed: " << e.what();
       return 1;
     }
@@ -1198,22 +1438,22 @@ int main(int argc, char* argv[]) {
     logger(INFO) << "Starting wallet rpc server";
     wrpc.run();
     logger(INFO) << "Stopped wallet rpc server";
-    
+
     try {
       logger(INFO) << "Storing wallet...";
       CryptoNote::WalletHelper::storeWallet(*wallet, walletFileName);
       logger(INFO, BRIGHT_GREEN) << "Stored ok";
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
       logger(ERROR, BRIGHT_RED) << "Failed to store wallet: " << e.what();
       return 1;
     }
   } else {
     //runs wallet with console interface
     CryptoNote::simple_wallet wal(dispatcher, currency, logManager);
-    
+
     if (!wal.init(vm)) {
-      logger(ERROR, BRIGHT_RED) << "Failed to initialize wallet"; 
-      return 1; 
+      logger(ERROR, BRIGHT_RED) << "Failed to initialize wallet";
+      return 1;
     }
 
     std::vector<std::string> command = command_line::get_arg(vm, arg_command);
@@ -1223,7 +1463,7 @@ int main(int argc, char* argv[]) {
     Tools::SignalHandler::install([&wal] {
       wal.stop();
     });
-    
+
     wal.run();
 
     if (!wal.deinit()) {

@@ -997,7 +997,7 @@ namespace CryptoNote
     }
     rsp.connections_count = get_connections_count();
     rsp.incoming_connections_count = rsp.connections_count - get_outgoing_connections_count();
-    rsp.version = PROJECT_VERSION_LONG;
+    rsp.version = PROJECT_VERSION;
     rsp.os_version = Tools::get_os_version_string();
     m_payload_handler.get_stat_info(rsp.payload_info);
     return 1;
