@@ -1,5 +1,5 @@
 # Bootstrap
-A bootstrap of the Discoin blockchain (height 337690) is available at: https://discoinapp.discodery.com/discoin-bootstrap-h337690.zip.
+A bootstrap of the Discoin blockchain (height 343739) is available at: https://discoinapp.discodery.com/discoin-bootstrap-h343739.zip (sha256 checksum: 92a1f21e0a1ba157af0f92a04fc2cc23b49dc530214961c37836e3e174edf8f4).
 # How to run the release binaries
 To run the pre-compiled binaries, some prerequisites can be necessary to install.
 ### Ubuntu 16.04
