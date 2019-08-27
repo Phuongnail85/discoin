@@ -900,11 +900,10 @@ bool core::getPoolTransactionsByTimestamp(uint64_t timestampBegin, uint64_t time
 
 bool core::getTransactionsByPaymentId(const Crypto::Hash& paymentId, std::vector<Transaction>& transactions) {
   std::vector<Crypto::Hash> blockchainTransactionHashes;
-  if (!m_blockchain.getTransactionIdsByPaymentId(paymentId, blockchainTransactionHashes)) {
-    return false;
-  }
   std::vector<Crypto::Hash> poolTransactionHashes;
-  if (!m_mempool.getTransactionIdsByPaymentId(paymentId, poolTransactionHashes)) {
+
+  if (!m_blockchain.getTransactionIdsByPaymentId(paymentId, blockchainTransactionHashes)
+      && !m_mempool.getTransactionIdsByPaymentId(paymentId, poolTransactionHashes)) {
     return false;
   }
   std::list<Transaction> txs;
