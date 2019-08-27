@@ -366,21 +366,55 @@ void secureSaveWallet(CryptoNote::IWallet& wallet, const std::string& path, bool
 void generateNewWallet(const CryptoNote::Currency &currency, const WalletConfiguration &conf, Logging::ILogger& logger, System::Dispatcher& dispatcher) {
   Logging::LoggerRef log(logger, "generateNewWallet");
 
+  if (conf.viewSecretKey.empty() || conf.spendSecretKey.empty()) {
+    log(Logging::ERROR, Logging::BRIGHT_RED) << "Both the secret spend key and the secret view key are required";
+    return;
+  }
+
   CryptoNote::INode* nodeStub = NodeFactory::createNodeStub();
   std::unique_ptr<CryptoNote::INode> nodeGuard(nodeStub);
 
   CryptoNote::IWallet* wallet = WalletFactory::createWallet(currency, *nodeStub, dispatcher);
   std::unique_ptr<CryptoNote::IWallet> walletGuard(wallet);
 
-  log(Logging::INFO) << "Generating new wallet";
-
   std::fstream walletFile;
   createWalletFile(walletFile, conf.walletFile);
+  std::string address;
 
-  wallet->initialize(conf.walletPassword);
-  auto address = wallet->createAddress();
+  if (conf.viewSecretKey.empty() && conf.spendSecretKey.empty()) {
+    log(Logging::INFO) << "Generating new wallet";
 
-  log(Logging::INFO) << "New wallet is generated. Address: " << address;
+    wallet->initialize(conf.walletPassword);
+    address = wallet->createAddress();
+
+    log(Logging::INFO) << "New wallet is generated. Address: " << address;
+  } else {
+    log(Logging::INFO) << "Importing wallet from keys";
+
+    Crypto::Hash viewSecretKeyHash;
+    Crypto::Hash spendSecretKeyHash;
+    size_t size;
+
+    if (!Common::fromHex(conf.viewSecretKey, &viewSecretKeyHash, sizeof(viewSecretKeyHash), size)
+        || size != sizeof(viewSecretKeyHash)) {
+      log(Logging::ERROR, Logging::BRIGHT_RED) << "Invalid view secret key";
+      return;
+    }
+
+    if (!Common::fromHex(conf.spendSecretKey, &spendSecretKeyHash, sizeof(spendSecretKeyHash), size)
+        || size != sizeof(spendSecretKeyHash)) {
+      log(Logging::ERROR, Logging::BRIGHT_RED) << "Invalid spend secret key";
+      return;
+    }
+
+    Crypto::SecretKey viewSecretKey = *(struct Crypto::SecretKey *) &viewSecretKeyHash;
+    Crypto::SecretKey spendSecretKey = *(struct Crypto::SecretKey *) &spendSecretKeyHash;
+
+    wallet->initializeWithViewKey(viewSecretKey, conf.walletPassword);
+    address = wallet->createAddress(spendSecretKey);
+
+    log(Logging::INFO) << "Wallet has been imported. Address: " << address;
+  }
 
   saveWallet(*wallet, walletFile, false, false);
   log(Logging::INFO) << "Wallet is saved";

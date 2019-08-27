@@ -16,6 +16,8 @@ namespace PaymentService {
 
 Configuration::Configuration() {
   generateNewContainer = false;
+  viewSecretKey = "";
+  spendSecretKey = "";
   daemonize = false;
   registerService = false;
   unregisterService = false;
@@ -33,6 +35,8 @@ void Configuration::initOptions(boost::program_options::options_description& des
       ("bind-port", po::value<uint16_t>()->default_value(8070), "payment service bind port")
       ("container-file,w", po::value<std::string>(), "container file")
       ("container-password,p", po::value<std::string>(), "container password")
+      ("view-secret-key", po::value<std::string>(), "generate a container with the given view secret key")
+      ("spend-secret-key", po::value<std::string>(), "generate a container with the given spend secret key")
       ("generate-container,g", "generate new container file with one wallet and exit")
       ("daemon,d", "run as daemon in Unix or as service in Windows")
 #ifdef _WIN32
@@ -100,6 +104,22 @@ void Configuration::init(const boost::program_options::variables_map& options) {
 
   if (options.count("generate-container") != 0) {
     generateNewContainer = true;
+  }
+
+  if (options.count("view-secret-key") != 0) {
+    if (!generateNewContainer) {
+      throw ConfigurationError("generate-container parameter is required");
+    }
+
+    viewSecretKey = options["view-secret-key"].as<std::string>();
+  }
+
+  if (options.count("spend-secret-key") != 0) {
+    if (!generateNewContainer) {
+      throw ConfigurationError("generate-container parameter is required");
+    }
+
+    spendSecretKey = options["spend-secret-key"].as<std::string>();
   }
 
   if (options.count("address") != 0) {
