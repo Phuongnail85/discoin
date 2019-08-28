@@ -43,6 +43,20 @@ struct GetViewKey {
   };
 };
 
+struct GetWalletInfo {
+  struct Request {
+    void serialize(CryptoNote::ISerializer& serializer);
+  };
+
+  struct Response {
+    std::string address;
+    uint64_t availableBalance;
+    uint64_t lockedAmount;
+
+    void serialize(CryptoNote::ISerializer& serializer);
+  };
+};
+
 struct GetStatus {
   struct Request {
     void serialize(CryptoNote::ISerializer& serializer);

@@ -50,6 +50,7 @@ public:
   std::error_code getSpendkeys(const std::string& address, std::string& publicSpendKeyText, std::string& secretSpendKeyText);
   std::error_code getBalance(const std::string& address, uint64_t& availableBalance, uint64_t& lockedAmount);
   std::error_code getBalance(uint64_t& availableBalance, uint64_t& lockedAmount);
+  std::error_code getWalletInfo(std::string& address, uint64_t& availableBalance, uint64_t& lockedAmount);
   std::error_code getBlockHashes(uint32_t firstBlockIndex, uint32_t blockCount, std::vector<std::string>& blockHashes);
   std::error_code getViewKey(std::string& viewSecretKey);
   std::error_code getTransactionHashes(const std::vector<std::string>& addresses, const std::string& blockHash,

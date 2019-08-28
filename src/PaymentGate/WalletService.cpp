@@ -671,6 +671,25 @@ std::error_code WalletService::getBalance(uint64_t& availableBalance, uint64_t& 
   return std::error_code();
 }
 
+std::error_code WalletService::getWalletInfo(std::string& address, uint64_t& availableBalance, uint64_t& lockedAmount) {
+  try {
+    System::EventLock lk(readyEvent);
+    logger(Logging::DEBUGGING) << "Getting wallet info";
+    const uint64_t index = 0;
+
+    address = wallet.getAddress(index);
+    availableBalance = wallet.getActualBalance(address);
+    lockedAmount = wallet.getPendingBalance(address);
+
+  } catch (std::system_error& x) {
+    logger(Logging::WARNING) << "Error while getting wallet info: " << x.what();
+    return x.code();
+  }
+
+  logger(Logging::DEBUGGING) << "Getting wallet info for address " << address << ", balance: " << availableBalance << ", pending: " << lockedAmount;
+  return std::error_code();
+}
+
 std::error_code WalletService::getBlockHashes(uint32_t firstBlockIndex, uint32_t blockCount, std::vector<std::string>& blockHashes) {
   try {
     System::EventLock lk(readyEvent);

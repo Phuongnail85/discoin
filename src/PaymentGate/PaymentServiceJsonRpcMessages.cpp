@@ -81,6 +81,15 @@ void GetBalance::Response::serialize(CryptoNote::ISerializer& serializer) {
   serializer(lockedAmount, "lockedAmount");
 }
 
+void GetWalletInfo::Request::serialize(CryptoNote::ISerializer& serializer) {
+}
+
+void GetWalletInfo::Response::serialize(CryptoNote::ISerializer& serializer) {
+  serializer(address, "address");
+  serializer(lockedAmount, "lockedAmount");
+  serializer(availableBalance, "availableBalance");
+}
+
 void GetBlockHashes::Request::serialize(CryptoNote::ISerializer& serializer) {
   bool r = serializer(firstBlockIndex, "firstBlockIndex");
   r &= serializer(blockCount, "blockCount");

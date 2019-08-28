@@ -5,6 +5,7 @@
 #include "PaymentServiceJsonRpcServer.h"
 
 #include <functional>
+#include <iostream>
 
 #include "PaymentServiceJsonRpcMessages.h"
 #include "WalletService.h"
@@ -14,7 +15,7 @@
 
 namespace PaymentService {
 
-PaymentServiceJsonRpcServer::PaymentServiceJsonRpcServer(System::Dispatcher& sys, System::Event& stopEvent, WalletService& service, Logging::ILogger& loggerGroup) 
+PaymentServiceJsonRpcServer::PaymentServiceJsonRpcServer(System::Dispatcher& sys, System::Event& stopEvent, WalletService& service, Logging::ILogger& loggerGroup)
   : JsonRpcServer(sys, stopEvent, loggerGroup)
   , service(service)
   , logger(loggerGroup, "PaymentServiceJsonRpcServer")
@@ -37,6 +38,7 @@ PaymentServiceJsonRpcServer::PaymentServiceJsonRpcServer(System::Dispatcher& sys
   handlers.emplace("getViewKey", jsonHandler<GetViewKey::Request, GetViewKey::Response>(std::bind(&PaymentServiceJsonRpcServer::handleGetViewKey, this, std::placeholders::_1, std::placeholders::_2)));
   handlers.emplace("getStatus", jsonHandler<GetStatus::Request, GetStatus::Response>(std::bind(&PaymentServiceJsonRpcServer::handleGetStatus, this, std::placeholders::_1, std::placeholders::_2)));
   handlers.emplace("getAddresses", jsonHandler<GetAddresses::Request, GetAddresses::Response>(std::bind(&PaymentServiceJsonRpcServer::handleGetAddresses, this, std::placeholders::_1, std::placeholders::_2)));
+  handlers.emplace("getWalletInfo", jsonHandler<GetWalletInfo::Request, GetWalletInfo::Response>(std::bind(&PaymentServiceJsonRpcServer::handleGetWalletInfo, this, std::placeholders::_1, std::placeholders::_2)));
 }
 
 void PaymentServiceJsonRpcServer::processJsonRpcRequest(const Common::JsonValue& req, Common::JsonValue& resp) {
@@ -110,6 +112,10 @@ std::error_code PaymentServiceJsonRpcServer::handleGetBalance(const GetBalance::
   } else {
     return service.getBalance(response.availableBalance, response.lockedAmount);
   }
+}
+
+std::error_code PaymentServiceJsonRpcServer::handleGetWalletInfo(const GetWalletInfo::Request& request, GetWalletInfo::Response& response) {
+  return service.getWalletInfo(response.address, response.availableBalance, response.lockedAmount);
 }
 
 std::error_code PaymentServiceJsonRpcServer::handleGetBlockHashes(const GetBlockHashes::Request& request, GetBlockHashes::Response& response) {
